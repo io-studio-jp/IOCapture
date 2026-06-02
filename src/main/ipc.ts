@@ -1,8 +1,10 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { writeFile } from 'fs/promises'
 import { IPC } from '../shared/ipc-types'
-import type { LoadUrlArgs, SetFrameRectArgs, CaptureStillArgs } from '../shared/ipc-types'
+import type { LoadUrlArgs, SetFrameRectArgs, CaptureStillArgs, ConvertToMp4Args, SaveBlobArgs } from '../shared/ipc-types'
 import { loadArtworkUrl, setArtworkRect } from './artworkView'
 import { captureStill } from './capture'
+import { convertToMp4 } from './ffmpeg'
 
 export function registerIpc(getWindow: () => BrowserWindow): void {
   ipcMain.handle(IPC.loadUrl, (_e, args: LoadUrlArgs) => {
@@ -15,4 +17,15 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
   })
 
   ipcMain.handle(IPC.captureStill, (_e, args: CaptureStillArgs) => captureStill(args))
+
+  ipcMain.handle(IPC.convertToMp4, (_e, args: ConvertToMp4Args) => convertToMp4(args))
+
+  ipcMain.handle(IPC.saveBlob, async (_e, args: SaveBlobArgs) => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      defaultPath: args.defaultName,
+    })
+    if (canceled || !filePath) return { ok: false, canceled: true }
+    await writeFile(filePath, Buffer.from(args.data))
+    return { ok: true, path: filePath }
+  })
 }
