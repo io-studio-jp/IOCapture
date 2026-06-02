@@ -87,8 +87,8 @@ export async function startFrameCapture(
   ]
   const encodeArgs =
     format === 'webp'
-      ? // アニメーションWebP（音声なし・ループ）。グラデーションのバンディングを抑えるため高品質。
-        ['-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '0', '-quality', '92', '-compression_level', '6', '-preset', 'default']
+      ? // アニメーションWebP（音声なし・ループ）。ロスレスで滲み/バンディングを排除（容量増・重め）。
+        ['-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '1', '-compression_level', '4']
       : // H.264 / mp4。リアルタイム入力のためpresetは速め、画質はCRFで担保。
         ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '16', '-movflags', '+faststart']
 
@@ -113,7 +113,20 @@ export async function startFrameCapture(
       try {
         const image = await wc.capturePage()
         const frame = image.resize({ width: size.width, height: size.height, quality: 'better' })
-        const buf = frame.toBitmap()
+        const raw = frame.toBitmap()
+        // toBitmapは行にパディング(stride)が入ることがある。ffmpegは幅×4でタイトに
+        // 読むので、必要なら詰め直して行ズレ(横スジ)を防ぐ。
+        const rowBytes = size.width * 4
+        const expected = rowBytes * size.height
+        let buf = raw
+        if (raw.length !== expected) {
+          const stride = Math.floor(raw.length / size.height)
+          const tight = Buffer.allocUnsafe(expected)
+          for (let y = 0; y < size.height; y++) {
+            raw.copy(tight, y * rowBytes, y * stride, y * stride + rowBytes)
+          }
+          buf = tight
+        }
         if (withCursor) {
           const c = cursorInFrame()
           if (c) drawCursor(buf, size.width, size.height, c.x, c.y, cursorScale)
