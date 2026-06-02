@@ -5,6 +5,7 @@ import { capToGpuLimit } from '../../../shared/dpr'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Camera } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function StillControls({ aspect }: { aspect: Aspect }) {
@@ -19,37 +20,40 @@ export function StillControls({ aspect }: { aspect: Aspect }) {
         ? targetFromLongEdge(aspect, longEdge)
         : targetFromWidthCm(aspect, widthCm, dpi)
     const { ok, size } = capToGpuLimit(raw)
-    if (!ok) toast.warning(`GPU上限のため ${size.width}×${size.height}px に縮小しました`)
+    if (!ok) toast.warning(`Reduced to ${size.width}×${size.height}px due to GPU limit`)
     const res = await window.capture.captureStill({ target: size, transparent: true })
-    if (res.ok) toast.success(`保存: ${res.savedPath}`)
-    else if (res.error !== 'canceled') toast.error(`失敗: ${res.error}`)
+    if (res.ok) toast.success(`Saved: ${res.savedPath}`)
+    else if (res.error !== 'canceled') toast.error(`Failed: ${res.error}`)
   }
 
   return (
     <section className="space-y-3 border-t border-border px-5 py-5">
-      <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">静止画</h2>
+      <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Still</h2>
       <div className="grid grid-cols-2 gap-2">
         <Button size="sm" className="w-full" variant={mode === 'px' ? 'default' : 'secondary'} onClick={() => setMode('px')}>px</Button>
         <Button size="sm" className="w-full" variant={mode === 'cm' ? 'default' : 'secondary'} onClick={() => setMode('cm')}>cm/dpi</Button>
       </div>
       {mode === 'px' ? (
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">長辺px</Label>
+          <Label className="text-xs text-muted-foreground">Long edge (px)</Label>
           <Input type="number" value={longEdge} onChange={(e) => setLongEdge(+e.target.value)} />
         </div>
       ) : (
         <div className="flex gap-2">
           <div className="flex-1 space-y-1.5">
-            <Label className="text-xs text-muted-foreground">幅cm</Label>
+            <Label className="text-xs text-muted-foreground">Width (cm)</Label>
             <Input type="number" value={widthCm} onChange={(e) => setWidthCm(+e.target.value)} />
           </div>
           <div className="flex-1 space-y-1.5">
-            <Label className="text-xs text-muted-foreground">dpi</Label>
+            <Label className="text-xs text-muted-foreground">DPI</Label>
             <Input type="number" value={dpi} onChange={(e) => setDpi(+e.target.value)} />
           </div>
         </div>
       )}
-      <Button className="w-full" onClick={onCapture}>📷 静止画を撮る</Button>
+      <Button className="w-full" onClick={onCapture}>
+        <Camera />
+        Capture Still
+      </Button>
     </section>
   )
 }

@@ -13,5 +13,5 @@ test('16:9 1080 preset is 1920x1080', () => {
 })
 test('includes match-frame entry', () => {
   const presets = videoPresetsFor({ w: 4, h: 5 })
-  expect(presets.some((p) => p.label === '枠に合わせる')).toBe(true)
+  expect(presets.some((p) => p.label === 'Match frame')).toBe(true)
 })

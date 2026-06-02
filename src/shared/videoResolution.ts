@@ -16,6 +16,6 @@ export function videoPresetsFor(
     { label: '1080', size: sizeForShortEdge(aspect, 1080) },
     { label: '1440', size: sizeForShortEdge(aspect, 1440) },
     { label: '2160', size: sizeForShortEdge(aspect, 2160) },
-    { label: '枠に合わせる', size: null },
+    { label: 'Match frame', size: null },
   ]
 }

@@ -4,6 +4,7 @@ import type { Rect } from '../../../shared/frameRect'
 import { videoPresetsFor } from '../../../shared/videoResolution'
 import { startRecording, type RecordHandle } from '../lib/recorder'
 import { Button } from '@/components/ui/button'
+import { Circle, Square } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function VideoControls({
@@ -22,13 +23,13 @@ export function VideoControls({
     if (recording) {
       const { blob, hadAudio } = await handleRef.current!.stop()
       setRecording(false)
-      if (!hadAudio) toast.warning('システム音声を取得できませんでした（映像のみ）。仮想オーディオデバイスの導入を検討してください。')
+      if (!hadAudio) toast.warning('Could not capture system audio (video only). Consider installing a virtual audio device.')
       const webm = await blob.arrayBuffer()
       const saved = await window.capture.saveBlob({ data: webm, defaultName: `capture-${Date.now()}.webm` })
       if (saved.ok) {
         const conv = await window.capture.convertToMp4({ webmPath: saved.path })
-        if (conv.ok) toast.success(`mp4保存: ${conv.mp4Path}`)
-        else toast.error(`mp4変換失敗（webmは保存済み）: ${conv.error}`)
+        if (conv.ok) toast.success(`Saved mp4: ${conv.mp4Path}`)
+        else toast.error(`mp4 conversion failed (webm saved): ${conv.error}`)
       }
       return
     }
@@ -44,7 +45,7 @@ export function VideoControls({
 
   return (
     <section className="space-y-3 border-t border-border px-5 py-5">
-      <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">動画</h2>
+      <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Video</h2>
       <div className="grid grid-cols-3 gap-2">
         {fixed.map((p) => (
           <Button
@@ -69,7 +70,8 @@ export function VideoControls({
         </Button>
       )}
       <Button className="w-full" variant={recording ? 'destructive' : 'default'} onClick={onToggle}>
-        {recording ? '■ 停止' : '● 録画'}
+        {recording ? <Square className="fill-current" /> : <Circle className="fill-current" />}
+        {recording ? 'Stop' : 'Record'}
       </Button>
     </section>
   )
