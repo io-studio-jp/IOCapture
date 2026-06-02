@@ -1,6 +1,6 @@
 import { dialog } from 'electron'
 import { writeFile } from 'fs/promises'
-import { join } from 'path'
+import { join, resolve, sep } from 'path'
 import { withDeviceScale, getArtworkView } from './artworkView'
 import { deriveDeviceScaleFactor } from '../shared/dpr'
 import type {
@@ -41,8 +41,17 @@ export async function captureStill(args: CaptureStillArgs): Promise<CaptureStill
 // ダイアログ無しで指定ディレクトリへ連番保存する（連続撮影用）。
 export async function captureStillTo(args: CaptureStillToArgs): Promise<CaptureStillResult> {
   try {
+    // パストラバーサル防止: nameは単純なファイル名(.png)のみ許可し、
+    // 解決後のパスが dir 配下に収まることを保証する。
+    if (!/^[A-Za-z0-9._-]+\.png$/.test(args.name)) {
+      return { ok: false, error: 'invalid file name' }
+    }
+    const dir = resolve(args.dir)
+    const savedPath = resolve(dir, args.name)
+    if (savedPath !== join(dir, args.name) || !savedPath.startsWith(dir + sep)) {
+      return { ok: false, error: 'invalid path' }
+    }
     const png = await capturePng(args.target)
-    const savedPath = join(args.dir, args.name)
     await writeFile(savedPath, png)
     return { ok: true, savedPath, width: args.target.width, height: args.target.height }
   } catch (e) {
