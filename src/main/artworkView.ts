@@ -46,11 +46,31 @@ export async function withDeviceScale<T>(
     deviceScaleFactor: scale,
   })
   try {
-    await new Promise((r) => setTimeout(r, 120))
+    // DPRを上げただけでは多くの作品はcanvasを描き直さない。
+    // resizeイベントを送って作品自身に高解像度バッファで再描画させ、数フレーム安定を待つ。
+    await settleAfterDprChange(wc)
     return await fn(view!)
   } finally {
     wc.disableDeviceEmulation()
+    // 表示を元のDPRへ戻すため、作品にもう一度再レイアウトを促す。
+    wc.executeJavaScript(`window.dispatchEvent(new Event('resize'))`).catch(() => {})
   }
+}
+
+/** 作品にresizeを通知し、再描画が落ち着くまで複数フレーム待つ。 */
+async function settleAfterDprChange(wc: Electron.WebContents): Promise<void> {
+  await wc
+    .executeJavaScript(
+      `new Promise((res) => {
+        window.dispatchEvent(new Event('resize'));
+        let n = 0;
+        const tick = () => (++n < 6 ? requestAnimationFrame(tick) : res(true));
+        requestAnimationFrame(tick);
+      })`,
+    )
+    .catch(() => {})
+  // 重い作品の描画完了を少し余分に待つ。
+  await new Promise((r) => setTimeout(r, 120))
 }
 
 export function getArtworkView(): WebContentsView | null {

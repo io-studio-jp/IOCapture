@@ -16,7 +16,13 @@ export async function captureStill(args: CaptureStillArgs): Promise<CaptureStill
     const image = await withDeviceScale(scale, async (v) => {
       return v.webContents.capturePage()
     })
-    const png = image.toPNG()
+    // capturePageの実寸はDPRの丸め等で目標と数%ずれることがあるため、
+    // 厳密に指定ピクセルへ整える（大きい場合はダウンスケールで高品質、足りない場合のみ拡大）。
+    const sized =
+      image.getSize().width === args.target.width && image.getSize().height === args.target.height
+        ? image
+        : image.resize({ width: args.target.width, height: args.target.height, quality: 'best' })
+    const png = sized.toPNG()
 
     const { canceled, filePath } = await dialog.showSaveDialog({
       defaultPath: `capture-${Date.now()}.png`,
