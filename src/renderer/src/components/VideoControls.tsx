@@ -70,7 +70,11 @@ export function VideoControls({
         </Button>
       )}
       <Button className="w-full" variant={recording ? 'destructive' : 'default'} onClick={onToggle}>
-        {recording ? <Square className="fill-current" /> : <Circle className="fill-current" />}
+        {recording ? (
+          <Square className="fill-current" />
+        ) : (
+          <Circle className="size-3 fill-red-500 text-red-500" />
+        )}
         {recording ? 'Stop' : 'Record'}
       </Button>
     </section>
