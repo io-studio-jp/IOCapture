@@ -1,6 +1,6 @@
 {
   "name": "iocapture",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Capture WebGL / generative artworks at controlled aspect ratio and resolution.",
   "main": "./out/main/index.js",
   "author": "Chiaki Uehira",
