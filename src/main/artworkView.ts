@@ -47,8 +47,14 @@ export function ensureArtworkView(win: BrowserWindow): WebContentsView {
   view = new WebContentsView()
   win.contentView.addChildView(view)
   const wc = view.webContents
+  // ウィンドウ破棄後にイベントが発火しても安全に送るためのヘルパー。
+  const safeSend = (channel: string, payload: unknown): void => {
+    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send(channel, payload)
+    }
+  }
   wc.on('did-fail-load', (_e, code, desc, url) => {
-    win.webContents.send('artwork:loadError', { code, desc, url })
+    safeSend('artwork:loadError', { code, desc, url })
   })
   // 読み込み・遷移のたびにCSSが失われるので毎回注入する。
   wc.on('did-finish-load', () => {
@@ -57,7 +63,7 @@ export function ensureArtworkView(win: BrowserWindow): WebContentsView {
   })
   const sendUrl = (url: string): void => {
     setLastUrl(url)
-    win.webContents.send('artwork:urlChanged', url)
+    safeSend('artwork:urlChanged', url)
   }
   wc.on('did-navigate', (_e, url) => sendUrl(url))
   wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
@@ -171,24 +177,30 @@ const PICKER_SCRIPT = `new Promise((resolve) => {
   document.addEventListener('keydown', key, true);
 })`
 
+function sendMain(channel: string, payload: unknown): void {
+  if (mainWin && !mainWin.isDestroyed() && !mainWin.webContents.isDestroyed()) {
+    mainWin.webContents.send(channel, payload)
+  }
+}
+
 /** クリックで要素を選んで消すモードを開始（Esc/Stopで終了するまで連続でピック）。 */
 export async function startPicking(): Promise<void> {
   if (picking) return
   const wc = view?.webContents
   if (!wc || !mainWin) return
   picking = true
-  mainWin.webContents.send('artwork:pickState', true)
+  sendMain('artwork:pickState', true)
   try {
     while (picking) {
       const selector: string | null = await wc.executeJavaScript(PICKER_SCRIPT).catch(() => null)
       if (!picking || !selector) break
       appendHideSelector(selector)
       applyHide()
-      mainWin.webContents.send('artwork:hideSelectorsChanged', hideSelectors)
+      sendMain('artwork:hideSelectorsChanged', hideSelectors)
     }
   } finally {
     picking = false
-    mainWin?.webContents.send('artwork:pickState', false)
+    sendMain('artwork:pickState', false)
   }
 }
 
