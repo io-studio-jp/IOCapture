@@ -5,6 +5,7 @@ import type {
   CaptureStillArgs, CaptureStillResult,
   ConvertToMp4Args, ConvertToMp4Result,
   SaveBlobArgs, SaveBlobResult,
+  Prefs,
 } from '../shared/ipc-types'
 import type { Rect } from '../shared/frameRect'
 
@@ -28,6 +29,15 @@ const api = {
     ipcRenderer.on('artwork:urlChanged', handler)
     return (): void => { ipcRenderer.removeListener('artwork:urlChanged', handler) }
   },
+  // 機能2: ナビゲーション
+  goBack: () => ipcRenderer.send(IPC.goBack),
+  goForward: () => ipcRenderer.send(IPC.goForward),
+  reload: () => ipcRenderer.send(IPC.reload),
+  // 機能3: プリセット記憶
+  getPrefs: (): Prefs => ipcRenderer.sendSync(IPC.getPrefs),
+  setPrefs: (p: Partial<Prefs>) => ipcRenderer.send(IPC.setPrefs, p),
+  // 機能6: CSS非表示
+  setHideSelectors: (sel: string) => ipcRenderer.send(IPC.setHideSelectors, sel),
 }
 
 if (process.contextIsolated) {
