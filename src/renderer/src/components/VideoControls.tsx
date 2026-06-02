@@ -45,7 +45,7 @@ export function VideoControls({
       const saved = await window.capture.saveBlob({ data: webm, defaultName: `capture-${Date.now()}.webm` })
       if (saved.ok) {
         const conv = await window.capture.convertToMp4({ webmPath: saved.path })
-        if (conv.ok) toast.success(`Saved mp4: ${conv.mp4Path}`)
+        if (conv.ok) toast.success('Saved mp4', { description: conv.mp4Path.split('/').pop() })
         else toast.error(`mp4 conversion failed (webm saved): ${conv.error}`)
       }
       return

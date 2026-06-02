@@ -12,6 +12,7 @@ import {
   setHideSelectors,
   startPicking,
   stopPicking,
+  setHideCursor,
 } from './artworkView'
 import { captureStill } from './capture'
 import { convertToMp4 } from './ffmpeg'
@@ -55,6 +56,7 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
   ipcMain.on(IPC.setHideSelectors, (_e, sel: string) => setHideSelectors(sel))
   ipcMain.on(IPC.startPick, () => startPicking())
   ipcMain.on(IPC.stopPick, () => stopPicking())
+  ipcMain.on(IPC.setHideCursor, (_e, v: boolean) => setHideCursor(v))
 
   // 動画クロップ用: ウィンドウ外枠とコンテンツ領域の差（≒タイトルバー高さ）。
   // desktopCapturerはタイトルバー込みでウィンドウを撮るため、この分だけ原点をずらす。

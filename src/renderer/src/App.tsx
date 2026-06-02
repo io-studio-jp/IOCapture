@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
-import { ChevronLeft, ChevronRight, RotateCw, MousePointerClick } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RotateCw, MousePointerClick, MousePointer2 } from 'lucide-react'
 
 function App() {
   const [url, setUrl] = useState('')
@@ -18,6 +18,8 @@ function App() {
   const [hideSelectors, setHide] = useState(() => window.capture.getPrefs().hideSelectors ?? '')
   // クリックで要素を選んで消すピックモードの状態
   const [picking, setPicking] = useState(false)
+  // カーソル非表示トグル（録画への写り込み対策）
+  const [hideCursor, setHideCursorState] = useState(() => window.capture.getPrefs().hideCursor ?? false)
   const { stageRef, getFrameRect } = useFrameRect(aspect)
 
   // アスペクト変更時にprefsへ保存
@@ -66,6 +68,12 @@ function App() {
     window.capture.setPrefs({ hideSelectors })
     window.capture.setHideSelectors(hideSelectors)
   }, [hideSelectors])
+
+  // カーソル非表示の保存＋適用（マウント時に復元値も適用）
+  useEffect(() => {
+    window.capture.setPrefs({ hideCursor })
+    window.capture.setHideCursor(hideCursor)
+  }, [hideCursor])
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
@@ -144,10 +152,24 @@ function App() {
                 Clear
               </Button>
             )}
+            <Button
+              size="sm"
+              className="w-full"
+              variant={hideCursor ? 'default' : 'secondary'}
+              onClick={() => setHideCursorState((v) => !v)}
+            >
+              <MousePointer2 />
+              {hideCursor ? 'Cursor hidden' : 'Hide cursor'}
+            </Button>
           </section>
         </aside>
       </div>
-      <Toaster theme="dark" />
+      <Toaster
+        theme="dark"
+        position="top-right"
+        offset={16}
+        style={{ '--width': '256px' } as React.CSSProperties}
+      />
     </div>
   )
 }
