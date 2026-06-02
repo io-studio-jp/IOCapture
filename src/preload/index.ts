@@ -48,8 +48,13 @@ const api = {
   stopPick: () => ipcRenderer.send(IPC.stopPick),
   getContentInset: (): Promise<{ x: number; y: number }> => ipcRenderer.invoke(IPC.getContentInset),
   revealFile: (path: string) => ipcRenderer.send(IPC.revealFile, path),
-  startFrameCapture: (target: TargetSize, fps: number, includeCursor: boolean): Promise<StartFrameCaptureResult> =>
-    ipcRenderer.invoke(IPC.startFrameCapture, { target, fps, includeCursor }),
+  startFrameCapture: (
+    target: TargetSize,
+    fps: number,
+    includeCursor: boolean,
+    format: 'mp4' | 'webp',
+  ): Promise<StartFrameCaptureResult> =>
+    ipcRenderer.invoke(IPC.startFrameCapture, { target, fps, includeCursor, format }),
   stopFrameCapture: (audio: ArrayBuffer | null): Promise<StopFrameCaptureResult> =>
     ipcRenderer.invoke(IPC.stopFrameCapture, { audio }),
   saveWebmAsMp4: (data: ArrayBuffer): Promise<StopFrameCaptureResult> =>

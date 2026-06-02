@@ -20,9 +20,16 @@ export function VideoControls({
   const [recording, setRecording] = useState(false)
   const [counting, setCounting] = useState(false)
   const [timer, setTimerState] = useState(() => window.capture.getPrefs().videoTimer ?? 0)
-  // カーソルを録画に含めるか（ON=ウィンドウキャプチャ方式）
+  // カーソルを録画に含めるか（フレームに矢印を合成）
   const [includeCursor, setIncludeCursorState] = useState(() => window.capture.getPrefs().includeCursor ?? false)
+  // 出力フォーマット（mp4=音声あり / webp=アニメーション画像・音声なし）
+  const [format, setFormatState] = useState<'mp4' | 'webp'>(() => window.capture.getPrefs().videoFormat ?? 'mp4')
   const handleRef = useRef<RecordHandle | null>(null)
+
+  const setFormat = (f: 'mp4' | 'webp'): void => {
+    setFormatState(f)
+    window.capture.setPrefs({ videoFormat: f })
+  }
 
   const setTimer = (v: number): void => {
     setTimerState(v)
@@ -55,9 +62,9 @@ export function VideoControls({
     const preset = presets.find((p) => p.label === presetLabel)!
     const target = preset.size ?? { width: rect.width, height: rect.height }
     try {
-      handleRef.current = await startRecording(target, includeCursor)
+      handleRef.current = await startRecording(target, includeCursor, format)
       setRecording(true)
-      if (!handleRef.current.hadAudio) {
+      if (format === 'mp4' && !handleRef.current.hadAudio) {
         toast.warning('Recording without audio. Grant Screen Recording permission for system audio.')
       }
     } catch (e) {
@@ -71,7 +78,7 @@ export function VideoControls({
       const res = await handleRef.current!.stop()
       if ('mp4Path' in res) {
         const path = res.mp4Path
-        toast.success('Saved mp4', {
+        toast.success(`Saved ${format}`, {
           description: path.split('/').pop(),
           action: { label: 'Reveal', onClick: () => window.capture.revealFile(path) },
         })
@@ -107,6 +114,16 @@ export function VideoControls({
   return (
     <section className="space-y-3 border-t border-border px-5 py-5">
       <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Video</h2>
+      {/* 出力フォーマット */}
+      <div className="grid grid-cols-2 gap-2">
+        <Button size="sm" className="w-full" variant={format === 'mp4' ? 'default' : 'secondary'} onClick={() => setFormat('mp4')} disabled={recording || counting}>
+          MP4
+        </Button>
+        <Button size="sm" className="w-full" variant={format === 'webp' ? 'default' : 'secondary'} onClick={() => setFormat('webp')} disabled={recording || counting}>
+          WebP
+        </Button>
+      </div>
+      {format === 'webp' && <p className="text-xs text-muted-foreground">アニメーションWebP（音声なし）</p>}
       <div className="grid grid-cols-3 gap-2">
         {fixed.map((p) => (
           <Button

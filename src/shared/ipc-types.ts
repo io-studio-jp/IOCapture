@@ -39,7 +39,13 @@ export type ConvertToMp4Args = { webmPath: string }
 export type ConvertToMp4Result = { ok: true; mp4Path: string } | { ok: false; error: string }
 export type SaveBlobArgs = { data: ArrayBuffer; defaultName: string }
 export type SaveBlobResult = { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
-export type StartFrameCaptureArgs = { target: TargetSize; fps: number; includeCursor: boolean }
+export type VideoFormat = 'mp4' | 'webp'
+export type StartFrameCaptureArgs = {
+  target: TargetSize
+  fps: number
+  includeCursor: boolean
+  format: VideoFormat
+}
 export type StartFrameCaptureResult = { ok: boolean; error?: string }
 export type StopFrameCaptureArgs = { audio: ArrayBuffer | null }
 export type StopFrameCaptureResult =
@@ -62,4 +68,5 @@ export type Prefs = {
   outputDir?: string
   intervalCount?: number
   intervalSec?: number
+  videoFormat?: VideoFormat
 }

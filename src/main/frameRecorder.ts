@@ -21,6 +21,7 @@ let tmpDir = ''
 let videoPath = ''
 let size: TargetSize = { width: 0, height: 0 }
 let withCursor = false
+let format: 'mp4' | 'webp' = 'mp4'
 
 export function isFrameRecording(): boolean {
   return ffmpeg !== null
@@ -45,6 +46,7 @@ export async function startFrameCapture(
   target: TargetSize,
   fps: number,
   includeCursor = false,
+  fmt: 'mp4' | 'webp' = 'mp4',
 ): Promise<{ ok: boolean; error?: string }> {
   const view = getArtworkView()
   if (!view) return { ok: false, error: 'view not ready' }
@@ -52,13 +54,14 @@ export async function startFrameCapture(
   if (ffmpeg) return { ok: false, error: 'already recording' }
 
   withCursor = includeCursor
+  format = fmt
   // 偶数寸法（H.264が要求）に丸める。
   size = { width: Math.round(target.width / 2) * 2, height: Math.round(target.height / 2) * 2 }
 
   tmpDir = await mkdtemp(join(tmpdir(), 'iocapture-'))
-  videoPath = join(tmpDir, 'video.mp4')
+  videoPath = join(tmpDir, format === 'webp' ? 'video.webp' : 'video.mp4')
 
-  ffmpeg = spawn(ffmpegPath, [
+  const inputArgs = [
     '-y',
     '-f', 'rawvideo',
     '-pixel_format', 'bgra',
@@ -66,15 +69,15 @@ export async function startFrameCapture(
     '-framerate', String(fps),
     '-i', 'pipe:0',
     '-an',
-    '-c:v', 'libx264',
-    '-pix_fmt', 'yuv420p',
-    // リアルタイム入力のため preset は速め維持（遅くするとフレーム落ち）。
-    // 画質は CRF で上げる（18 = 高画質）。
-    '-preset', 'veryfast',
-    '-crf', '18',
-    '-movflags', '+faststart',
-    videoPath,
-  ])
+  ]
+  const encodeArgs =
+    format === 'webp'
+      ? // アニメーションWebP（音声なし・ループ）。
+        ['-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '0', '-quality', '80', '-preset', 'default']
+      : // H.264 / mp4。リアルタイム入力のためpresetは速め、画質はCRFで担保。
+        ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '18', '-movflags', '+faststart']
+
+  ffmpeg = spawn(ffmpegPath, [...inputArgs, ...encodeArgs, videoPath])
   ffmpeg.stdin.on('error', () => {}) // EPIPE等は無視（停止時に閉じるため）
   ffmpeg.on('error', () => {})
 
@@ -136,8 +139,8 @@ export async function stopFrameCapture(
   try {
     let finalPath = videoPath
 
-    // 音声があれば mux する。
-    if (audio && audio.byteLength > 0 && ffmpegPath) {
+    // mp4 のみ音声を mux する（WebPは画像形式なので音声なし）。
+    if (format === 'mp4' && audio && audio.byteLength > 0 && ffmpegPath) {
       const audioPath = join(tmpDir, 'audio.webm')
       const mixedPath = join(tmpDir, 'final.mp4')
       await writeFile(audioPath, Buffer.from(audio))
@@ -158,9 +161,10 @@ export async function stopFrameCapture(
       finalPath = mixedPath
     }
 
+    const ext = format === 'webp' ? 'webp' : 'mp4'
     const { canceled, filePath } = await dialog.showSaveDialog({
-      defaultPath: `capture-${Date.now()}.mp4`,
-      filters: [{ name: 'MP4', extensions: ['mp4'] }],
+      defaultPath: `capture-${Date.now()}.${ext}`,
+      filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
     })
     if (canceled || !filePath) {
       await cleanup()

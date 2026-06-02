@@ -14,17 +14,20 @@ export type RecordHandle = {
 export async function startRecording(
   target: TargetSize,
   includeCursor = false,
+  format: 'mp4' | 'webp' = 'mp4',
   fps = 60,
 ): Promise<RecordHandle> {
-  const started = await window.capture.startFrameCapture(target, fps, includeCursor)
+  const started = await window.capture.startFrameCapture(target, fps, includeCursor, format)
   if (!started.ok) throw new Error(started.error || 'failed to start frame capture')
 
   // 音声のみ録音（システム音声ループバック）。映像トラックは使わないので停止する。
+  // WebPは画像形式で音声を持てないため録音しない。
   let audioRec: MediaRecorder | null = null
   let audioStream: MediaStream | null = null
   const chunks: Blob[] = []
   let hadAudio = false
   try {
+    if (format === 'webp') throw new Error('skip audio')
     audioStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
     audioStream.getVideoTracks().forEach((t) => t.stop())
     const audioTracks = audioStream.getAudioTracks()
