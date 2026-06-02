@@ -23,6 +23,7 @@ export const IPC = {
   startPick: 'artwork:startPick',
   stopPick: 'artwork:stopPick',
   getContentInset: 'window:getContentInset',
+  revealFile: 'file:reveal',
 } as const
 
 export type LoadUrlArgs = { url: string }

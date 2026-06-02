@@ -69,7 +69,13 @@ export function VideoControls({
     if (recording) {
       setRecording(false)
       const res = await handleRef.current!.stop()
-      if ('mp4Path' in res) toast.success('Saved mp4', { description: res.mp4Path.split('/').pop() })
+      if ('mp4Path' in res) {
+        const path = res.mp4Path
+        toast.success('Saved mp4', {
+          description: path.split('/').pop(),
+          action: { label: 'Reveal', onClick: () => window.capture.revealFile(path) },
+        })
+      }
       else if (!res.canceled) toast.error(`Save failed: ${res.error}`)
       return
     }

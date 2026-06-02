@@ -44,6 +44,7 @@ const api = {
   startPick: () => ipcRenderer.send(IPC.startPick),
   stopPick: () => ipcRenderer.send(IPC.stopPick),
   getContentInset: (): Promise<{ x: number; y: number }> => ipcRenderer.invoke(IPC.getContentInset),
+  revealFile: (path: string) => ipcRenderer.send(IPC.revealFile, path),
   startFrameCapture: (target: TargetSize, fps: number, includeCursor: boolean): Promise<StartFrameCaptureResult> =>
     ipcRenderer.invoke(IPC.startFrameCapture, { target, fps, includeCursor }),
   stopFrameCapture: (audio: ArrayBuffer | null): Promise<StopFrameCaptureResult> =>

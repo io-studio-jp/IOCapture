@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { ipcMain, BrowserWindow, dialog, shell } from 'electron'
 import { writeFile } from 'fs/promises'
 import { IPC } from '../shared/ipc-types'
 import type { LoadUrlArgs, SetFrameRectArgs, CaptureStillArgs, ConvertToMp4Args, SaveBlobArgs } from '../shared/ipc-types'
@@ -65,6 +65,7 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
   ipcMain.on(IPC.setHideSelectors, (_e, sel: string) => setHideSelectors(sel))
   ipcMain.on(IPC.startPick, () => startPicking())
   ipcMain.on(IPC.stopPick, () => stopPicking())
+  ipcMain.on(IPC.revealFile, (_e, path: string) => shell.showItemInFolder(path))
 
   // 動画クロップ用: ウィンドウ外枠とコンテンツ領域の差（≒タイトルバー高さ）。
   // desktopCapturerはタイトルバー込みでウィンドウを撮るため、この分だけ原点をずらす。
