@@ -35,7 +35,13 @@ function App() {
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." className="flex-1" />
+        <Input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') window.capture.loadUrl(url) }}
+          placeholder="https://..."
+          className="flex-1"
+        />
         <Button onClick={() => window.capture.loadUrl(url)}>Load</Button>
       </header>
       <div className="flex flex-1 overflow-hidden">
