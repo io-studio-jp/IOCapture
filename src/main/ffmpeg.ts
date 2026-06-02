@@ -1,9 +1,14 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import ffmpegPath from 'ffmpeg-static'
+import ffmpegStatic from 'ffmpeg-static'
 import type { ConvertToMp4Args, ConvertToMp4Result } from '../shared/ipc-types'
 
 const run = promisify(execFile)
+
+// パッケージ後は ffmpeg-static のバイナリが app.asar 内のパスを返すが、asar内の
+// 実行ファイルは起動できない。asarUnpack した app.asar.unpacked 側を指すよう補正する
+// （開発時は app.asar を含まないので no-op）。
+const ffmpegPath = ffmpegStatic ? ffmpegStatic.replace('app.asar', 'app.asar.unpacked') : null
 
 export async function convertToMp4(args: ConvertToMp4Args): Promise<ConvertToMp4Result> {
   if (!ffmpegPath) return { ok: false, error: 'ffmpeg binary not found' }
