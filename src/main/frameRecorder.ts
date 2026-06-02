@@ -55,8 +55,23 @@ export async function startFrameCapture(
 
   withCursor = includeCursor
   format = fmt
-  // 偶数寸法（H.264が要求）に丸める。
-  size = { width: Math.round(target.width / 2) * 2, height: Math.round(target.height / 2) * 2 }
+
+  // 実際にキャプチャできる解像度を測り、targetがそれを超える場合はアップスケールしない
+  // （引き伸ばし＋ロス圧縮による「ガビガビ」を防ぐ）。viewはframeと同アスペクトなので
+  // 幅基準のスケールでアスペクトは保たれる。
+  const round2 = (n: number): number => Math.max(2, Math.round(n / 2) * 2)
+  let nativeW = target.width
+  try {
+    const probe = await view.webContents.capturePage()
+    const ps = probe.getSize()
+    const bm = probe.toBitmap()
+    const sf = Math.sqrt(bm.length / 4 / Math.max(1, ps.width * ps.height)) // 実DPR
+    nativeW = Math.max(2, ps.width * sf)
+  } catch {
+    // 測定失敗時はtargetのまま
+  }
+  const fit = Math.min(1, nativeW / target.width)
+  size = { width: round2(target.width * fit), height: round2(target.height * fit) }
 
   tmpDir = await mkdtemp(join(tmpdir(), 'iocapture-'))
   videoPath = join(tmpDir, format === 'webp' ? 'video.webp' : 'video.mp4')
@@ -72,10 +87,10 @@ export async function startFrameCapture(
   ]
   const encodeArgs =
     format === 'webp'
-      ? // アニメーションWebP（音声なし・ループ）。
-        ['-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '0', '-quality', '80', '-preset', 'default']
+      ? // アニメーションWebP（音声なし・ループ）。グラデーションのバンディングを抑えるため高品質。
+        ['-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '0', '-quality', '92', '-compression_level', '6', '-preset', 'default']
       : // H.264 / mp4。リアルタイム入力のためpresetは速め、画質はCRFで担保。
-        ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '18', '-movflags', '+faststart']
+        ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '16', '-movflags', '+faststart']
 
   ffmpeg = spawn(ffmpegPath, [...inputArgs, ...encodeArgs, videoPath])
   ffmpeg.stdin.on('error', () => {}) // EPIPE等は無視（停止時に閉じるため）
