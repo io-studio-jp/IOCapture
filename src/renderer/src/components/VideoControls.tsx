@@ -73,7 +73,7 @@ export function VideoControls({
         {recording ? (
           <Square className="fill-current" />
         ) : (
-          <Circle className="size-3 fill-red-500 text-red-500" />
+          <Circle className="size-3 fill-current" />
         )}
         {recording ? 'Stop' : 'Record'}
       </Button>
