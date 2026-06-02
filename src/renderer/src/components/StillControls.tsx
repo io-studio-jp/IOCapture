@@ -26,30 +26,30 @@ export function StillControls({ aspect }: { aspect: Aspect }) {
   }
 
   return (
-    <div className="space-y-2">
-      <div className="text-xs text-muted-foreground">静止画</div>
-      <div className="flex gap-1">
-        <Button size="sm" variant={mode === 'px' ? 'default' : 'secondary'} onClick={() => setMode('px')}>px</Button>
-        <Button size="sm" variant={mode === 'cm' ? 'default' : 'secondary'} onClick={() => setMode('cm')}>cm/dpi</Button>
+    <section className="space-y-3 border-t border-border p-4">
+      <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">静止画</h2>
+      <div className="grid grid-cols-2 gap-1.5">
+        <Button size="sm" className="w-full" variant={mode === 'px' ? 'default' : 'secondary'} onClick={() => setMode('px')}>px</Button>
+        <Button size="sm" className="w-full" variant={mode === 'cm' ? 'default' : 'secondary'} onClick={() => setMode('cm')}>cm/dpi</Button>
       </div>
       {mode === 'px' ? (
-        <div>
-          <Label className="text-xs">長辺px</Label>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">長辺px</Label>
           <Input type="number" value={longEdge} onChange={(e) => setLongEdge(+e.target.value)} />
         </div>
       ) : (
         <div className="flex gap-2">
-          <div>
-            <Label className="text-xs">幅cm</Label>
+          <div className="flex-1 space-y-1.5">
+            <Label className="text-xs text-muted-foreground">幅cm</Label>
             <Input type="number" value={widthCm} onChange={(e) => setWidthCm(+e.target.value)} />
           </div>
-          <div>
-            <Label className="text-xs">dpi</Label>
+          <div className="flex-1 space-y-1.5">
+            <Label className="text-xs text-muted-foreground">dpi</Label>
             <Input type="number" value={dpi} onChange={(e) => setDpi(+e.target.value)} />
           </div>
         </div>
       )}
-      <Button className="w-full" onClick={onCapture}>📷 静止画を撮る</Button>
-    </div>
+      <Button className="mt-1 w-full" onClick={onCapture}>📷 静止画を撮る</Button>
+    </section>
   )
 }

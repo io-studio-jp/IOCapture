@@ -39,19 +39,38 @@ export function VideoControls({
     setRecording(true)
   }
 
+  const fixed = presets.filter((p) => p.size)
+  const matchFrame = presets.find((p) => p.size === null)
+
   return (
-    <div className="space-y-2">
-      <div className="text-xs text-muted-foreground">動画</div>
-      <div className="flex flex-wrap gap-1">
-        {presets.map((p) => (
-          <Button key={p.label} size="sm" variant={presetLabel === p.label ? 'default' : 'secondary'} onClick={() => setPresetLabel(p.label)}>
+    <section className="space-y-3 border-t border-border p-4">
+      <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">動画</h2>
+      <div className="grid grid-cols-3 gap-1.5">
+        {fixed.map((p) => (
+          <Button
+            key={p.label}
+            size="sm"
+            className="w-full px-0"
+            variant={presetLabel === p.label ? 'default' : 'secondary'}
+            onClick={() => setPresetLabel(p.label)}
+          >
             {p.label}
           </Button>
         ))}
       </div>
-      <Button className="w-full" variant={recording ? 'destructive' : 'default'} onClick={onToggle}>
+      {matchFrame && (
+        <Button
+          size="sm"
+          className="w-full"
+          variant={presetLabel === matchFrame.label ? 'default' : 'secondary'}
+          onClick={() => setPresetLabel(matchFrame.label)}
+        >
+          {matchFrame.label}
+        </Button>
+      )}
+      <Button className="mt-1 w-full" variant={recording ? 'destructive' : 'default'} onClick={onToggle}>
         {recording ? '■ 停止' : '● 録画'}
       </Button>
-    </div>
+    </section>
   )
 }

@@ -27,30 +27,40 @@ function App() {
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      <header className="flex gap-2 border-b border-border p-2">
+      <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
         <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." className="flex-1" />
         <Button onClick={() => window.capture.loadUrl(url)}>読込</Button>
       </header>
       <div className="flex flex-1 overflow-hidden">
         <div ref={stageRef} className="relative flex-1 bg-black" />
-        <aside className="w-64 space-y-3 overflow-y-auto border-l border-border bg-card p-3">
-          <div className="text-xs text-muted-foreground">比率</div>
-          <div className="flex flex-wrap gap-1">
-            {ASPECT_PRESETS.map((p) => (
-              <Button
-                key={p.label}
-                size="sm"
-                variant={aspect.w === p.aspect.w && aspect.h === p.aspect.h ? 'default' : 'secondary'}
-                onClick={() => setAspect(p.aspect)}
-              >
-                {p.label}
+        <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-l border-border bg-card">
+          <section className="space-y-2.5 p-4">
+            <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">比率</h2>
+            <div className="grid grid-cols-4 gap-1.5">
+              {ASPECT_PRESETS.map((p) => (
+                <Button
+                  key={p.label}
+                  size="sm"
+                  className="w-full px-0"
+                  variant={aspect.w === p.aspect.w && aspect.h === p.aspect.h ? 'default' : 'secondary'}
+                  onClick={() => setAspect(p.aspect)}
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Input
+                value={customAspect}
+                onChange={(e) => setCustomAspect(e.target.value)}
+                placeholder="任意 W:H 例 21:9"
+                className="h-8"
+              />
+              <Button size="sm" variant="secondary" onClick={() => { const a = parseAspect(customAspect); if (a) setAspect(a) }}>
+                適用
               </Button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1">
-            <Input value={customAspect} onChange={(e) => setCustomAspect(e.target.value)} placeholder="任意 W:H 例 21:9" className="h-8" />
-            <Button size="sm" onClick={() => { const a = parseAspect(customAspect); if (a) setAspect(a) }}>適用</Button>
-          </div>
+            </div>
+          </section>
           <StillControls aspect={aspect} />
           <VideoControls aspect={aspect} getFrameRect={getFrameRect} />
         </aside>
