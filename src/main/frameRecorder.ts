@@ -15,13 +15,13 @@ const ffmpegPath = ffmpegStatic ? ffmpegStatic.replace('app.asar', 'app.asar.unp
 // ウィンドウのタイトルバー等のズレも無い。出力解像度は各フレームをresizeして厳密に合わせる。
 let ffmpeg: ChildProcessWithoutNullStreams | null = null
 let writer: ReturnType<typeof setInterval> | null = null
-let subscribed = false
-let latest: Electron.NativeImage | null = null
 let tmpDir = ''
 let videoPath = ''
 let size: TargetSize = { width: 0, height: 0 }
 let withCursor = false
 let format: 'mp4' | 'webp' = 'mp4'
+let latestBuf: Buffer | null = null // capturePageループが更新する最新フレーム(BGRA)
+let stopped = false
 
 export function isFrameRecording(): boolean {
   return ffmpeg !== null
@@ -82,43 +82,52 @@ export async function startFrameCapture(
   ffmpeg.on('error', () => {})
 
   const wc = view.webContents
-  wc.beginFrameSubscription(false, (image) => {
-    latest = image
-  })
-  subscribed = true
 
-  // 一定間隔で最新フレームを目標解像度に整えて書き込む（出力fpsを一定に保つ）。
   // 画面上のmacOSカーソル(約18ptの矢印)と同じ見かけサイズにする。
-  // 出力での矢印の高さ(px) = 18 * (size.height / view CSS高さ)。スプライト18行で割ってscale化。
   const MACOS_CURSOR_CSS = 18
   const viewCssH = view.getBounds().height || size.height
   const cursorScale = (MACOS_CURSOR_CSS * size.height) / viewCssH / ARROW_ROWS
-  writer = setInterval(() => {
-    if (!latest || !ffmpeg) return
-    const frame = latest.resize({ width: size.width, height: size.height, quality: 'better' })
-    const buf = frame.toBitmap()
-    if (withCursor) {
-      const c = cursorInFrame()
-      if (c) drawCursor(buf, size.width, size.height, c.x, c.y, cursorScale)
+
+  // capturePage を可能な限り速く回して latestBuf を更新する（GPU合成コンテンツでも
+  // 毎回その時点の描画が取れる）。beginFrameSubscription はフレームを継続配信しない
+  // ことがあるため使わない。
+  latestBuf = null
+  stopped = false
+  const captureLoop = async (): Promise<void> => {
+    while (!stopped && ffmpeg) {
+      try {
+        const image = await wc.capturePage()
+        const frame = image.resize({ width: size.width, height: size.height, quality: 'better' })
+        const buf = frame.toBitmap()
+        if (withCursor) {
+          const c = cursorInFrame()
+          if (c) drawCursor(buf, size.width, size.height, c.x, c.y, cursorScale)
+        }
+        latestBuf = buf
+      } catch {
+        // 破棄中など。少し待って継続。
+        await new Promise((r) => setTimeout(r, 16))
+      }
     }
-    // バックプレッシャー時はドロップしてメモリ肥大を防ぐ。
-    if (ffmpeg.stdin.writable) ffmpeg.stdin.write(buf)
+  }
+  void captureLoop()
+
+  // 一定レートで最新フレームを書き出す（出力fpsを一定に保ち、再生速度を正しくする）。
+  // capturePageが間に合わなければ同じフレームが重複し、速ければ間引かれる。
+  writer = setInterval(() => {
+    if (ffmpeg && latestBuf && ffmpeg.stdin.writable) ffmpeg.stdin.write(latestBuf)
   }, Math.round(1000 / fps))
 
   return { ok: true }
 }
 
 function stopCaptureLoop(): void {
-  const view = getArtworkView()
-  if (subscribed) {
-    view?.webContents.endFrameSubscription()
-    subscribed = false
-  }
+  stopped = true
+  latestBuf = null
   if (writer) {
     clearInterval(writer)
     writer = null
   }
-  latest = null
 }
 
 /** 録画停止 → 映像確定 → （あれば）音声と合成 → 保存ダイアログ。 */
