@@ -68,7 +68,10 @@ export async function startFrameCapture(
     '-an',
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
+    // リアルタイム入力のため preset は速め維持（遅くするとフレーム落ち）。
+    // 画質は CRF で上げる（18 = 高画質）。
     '-preset', 'veryfast',
+    '-crf', '18',
     '-movflags', '+faststart',
     videoPath,
   ])
@@ -89,7 +92,7 @@ export async function startFrameCapture(
   const cursorScale = (MACOS_CURSOR_CSS * size.height) / viewCssH / ARROW_ROWS
   writer = setInterval(() => {
     if (!latest || !ffmpeg) return
-    const frame = latest.resize({ width: size.width, height: size.height, quality: 'good' })
+    const frame = latest.resize({ width: size.width, height: size.height, quality: 'better' })
     const buf = frame.toBitmap()
     if (withCursor) {
       const c = cursorInFrame()
@@ -145,6 +148,7 @@ export async function stopFrameCapture(
           '-i', audioPath,
           '-c:v', 'copy',
           '-c:a', 'aac',
+          '-b:a', '256k',
           '-shortest',
           mixedPath,
         ])
