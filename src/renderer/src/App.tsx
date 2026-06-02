@@ -19,6 +19,13 @@ function App() {
       toast.error(`Load failed (${info.code}): ${info.desc}`)
     })
     const offUrl = window.capture.onUrlChanged((next) => setUrl(next))
+    // 前回表示していたURLを復元して自動で読み込む。
+    window.capture.getLastUrl().then((last) => {
+      if (last) {
+        setUrl(last)
+        window.capture.loadUrl(last)
+      }
+    })
     return () => {
       offError()
       offUrl()

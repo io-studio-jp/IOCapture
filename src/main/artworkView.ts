@@ -1,5 +1,6 @@
 import { WebContentsView, BrowserWindow } from 'electron'
 import type { Rect } from '../shared/frameRect'
+import { setLastUrl } from './state'
 
 let view: WebContentsView | null = null
 let lastRect: Rect | null = null
@@ -23,7 +24,10 @@ export function ensureArtworkView(win: BrowserWindow): WebContentsView {
   wc.on('did-finish-load', () => {
     wc.insertCSS(HIDE_SCROLLBAR_CSS).catch(() => {})
   })
-  const sendUrl = (url: string): void => win.webContents.send('artwork:urlChanged', url)
+  const sendUrl = (url: string): void => {
+    setLastUrl(url)
+    win.webContents.send('artwork:urlChanged', url)
+  }
   wc.on('did-navigate', (_e, url) => sendUrl(url))
   wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
     if (isMainFrame) sendUrl(url)

@@ -10,6 +10,7 @@ import type { Rect } from '../shared/frameRect'
 
 const api = {
   loadUrl: (url: string) => ipcRenderer.invoke(IPC.loadUrl, { url }),
+  getLastUrl: (): Promise<string | null> => ipcRenderer.invoke(IPC.getLastUrl),
   setFrameRect: (rect: Rect) => ipcRenderer.send(IPC.setFrameRect, { rect }),
   captureStill: (args: CaptureStillArgs): Promise<CaptureStillResult> =>
     ipcRenderer.invoke(IPC.captureStill, args),

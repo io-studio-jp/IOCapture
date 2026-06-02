@@ -3,6 +3,7 @@ import type { TargetSize } from './resolution'
 
 export const IPC = {
   loadUrl: 'artwork:loadUrl',
+  getLastUrl: 'artwork:getLastUrl',
   setFrameRect: 'artwork:setFrameRect',
   captureStill: 'capture:still',
   convertToMp4: 'video:convertToMp4',
