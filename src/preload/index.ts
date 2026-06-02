@@ -38,6 +38,18 @@ const api = {
   setPrefs: (p: Partial<Prefs>) => ipcRenderer.send(IPC.setPrefs, p),
   // 機能6: CSS非表示
   setHideSelectors: (sel: string) => ipcRenderer.send(IPC.setHideSelectors, sel),
+  startPick: () => ipcRenderer.send(IPC.startPick),
+  stopPick: () => ipcRenderer.send(IPC.stopPick),
+  onPickState: (cb: (picking: boolean) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, picking: boolean): void => cb(picking)
+    ipcRenderer.on('artwork:pickState', handler)
+    return (): void => { ipcRenderer.removeListener('artwork:pickState', handler) }
+  },
+  onHideSelectorsChanged: (cb: (sel: string) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, sel: string): void => cb(sel)
+    ipcRenderer.on('artwork:hideSelectorsChanged', handler)
+    return (): void => { ipcRenderer.removeListener('artwork:hideSelectorsChanged', handler) }
+  },
 }
 
 if (process.contextIsolated) {

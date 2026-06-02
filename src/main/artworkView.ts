@@ -4,9 +4,11 @@ import { setLastUrl } from './state'
 
 let view: WebContentsView | null = null
 let lastRect: Rect | null = null
+let mainWin: BrowserWindow | null = null
 
 // 機能6: CSS非表示セレクタ
 let hideSelectors = ''
+let picking = false
 
 // 作品ページのスクロールバーを隠す（スクロール自体は可能）。macOSのオーバーレイ
 // スクロールバーはレイアウト幅を取らないため、構図には影響しない。
@@ -40,6 +42,7 @@ function applyHide(): void {
 }
 
 export function ensureArtworkView(win: BrowserWindow): WebContentsView {
+  mainWin = win
   if (view) return view
   view = new WebContentsView()
   win.contentView.addChildView(view)
@@ -93,6 +96,107 @@ export function reloadArtwork(): void {
 export function setHideSelectors(sel: string): void {
   hideSelectors = sel
   applyHide()
+}
+
+function appendHideSelector(sel: string): void {
+  const list = hideSelectors
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (!list.includes(sel)) list.push(sel)
+  hideSelectors = list.join(', ')
+}
+
+// クリックで要素を選んで消すピッカー。作品ページに注入し、クリックされた要素の
+// 安定したCSSセレクタを解決して返す（Esc/ キャンセルで null）。
+const PICKER_SCRIPT = `new Promise((resolve) => {
+  const ID = '__record_picker__';
+  const old = document.getElementById(ID); if (old) old.remove();
+  const overlay = document.createElement('div');
+  overlay.id = ID;
+  overlay.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;background:rgba(59,130,246,.2);border:2px solid #3b82f6;border-radius:2px;display:none;left:0;top:0';
+  document.documentElement.appendChild(overlay);
+  let current = null;
+  const esc = (s) => (window.CSS && CSS.escape) ? CSS.escape(s) : s;
+  function cssPath(el) {
+    if (el.id) return '#' + esc(el.id);
+    const parts = [];
+    let node = el;
+    while (node && node.nodeType === 1 && node !== document.body && parts.length < 6) {
+      if (node.id) { parts.unshift('#' + esc(node.id)); break; }
+      let sel = node.tagName.toLowerCase();
+      const cls = (node.getAttribute('class') || '').trim().split(/\\s+/).filter(Boolean);
+      if (cls.length) {
+        sel += '.' + cls.map(esc).join('.');
+      } else {
+        const parent = node.parentElement;
+        if (parent) {
+          const same = Array.prototype.filter.call(parent.children, (c) => c.tagName === node.tagName);
+          if (same.length > 1) sel += ':nth-of-type(' + (same.indexOf(node) + 1) + ')';
+        }
+      }
+      parts.unshift(sel);
+      node = node.parentElement;
+    }
+    return parts.join(' > ');
+  }
+  function move(e) {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if (!el || el === overlay) { current = null; overlay.style.display = 'none'; return; }
+    current = el;
+    const r = el.getBoundingClientRect();
+    overlay.style.display = 'block';
+    overlay.style.left = r.left + 'px';
+    overlay.style.top = r.top + 'px';
+    overlay.style.width = r.width + 'px';
+    overlay.style.height = r.height + 'px';
+  }
+  function cleanup() {
+    document.removeEventListener('mousemove', move, true);
+    document.removeEventListener('click', click, true);
+    document.removeEventListener('keydown', key, true);
+    overlay.remove();
+    delete window.__recordPickerCancel;
+  }
+  function click(e) {
+    e.preventDefault(); e.stopPropagation();
+    const el = current || document.elementFromPoint(e.clientX, e.clientY);
+    cleanup();
+    resolve(el ? cssPath(el) : null);
+  }
+  function key(e) { if (e.key === 'Escape') { cleanup(); resolve(null); } }
+  window.__recordPickerCancel = () => { cleanup(); resolve(null); };
+  document.addEventListener('mousemove', move, true);
+  document.addEventListener('click', click, true);
+  document.addEventListener('keydown', key, true);
+})`
+
+/** クリックで要素を選んで消すモードを開始（Esc/Stopで終了するまで連続でピック）。 */
+export async function startPicking(): Promise<void> {
+  if (picking) return
+  const wc = view?.webContents
+  if (!wc || !mainWin) return
+  picking = true
+  mainWin.webContents.send('artwork:pickState', true)
+  try {
+    while (picking) {
+      const selector: string | null = await wc.executeJavaScript(PICKER_SCRIPT).catch(() => null)
+      if (!picking || !selector) break
+      appendHideSelector(selector)
+      applyHide()
+      mainWin.webContents.send('artwork:hideSelectorsChanged', hideSelectors)
+    }
+  } finally {
+    picking = false
+    mainWin?.webContents.send('artwork:pickState', false)
+  }
+}
+
+export function stopPicking(): void {
+  picking = false
+  view?.webContents
+    .executeJavaScript('window.__recordPickerCancel && window.__recordPickerCancel()')
+    .catch(() => {})
 }
 
 /** 撮る瞬間だけ高DPRにする。終わったら戻す。 */

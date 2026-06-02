@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
-import { ChevronLeft, ChevronRight, RotateCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RotateCw, MousePointerClick } from 'lucide-react'
 
 function App() {
   const [url, setUrl] = useState('')
@@ -16,6 +16,8 @@ function App() {
   const [customAspect, setCustomAspect] = useState('')
   // 機能6: CSSセレクタ非表示（state変数名はhideSelectorsだが、setterはsetHideを使い命名衝突を回避）
   const [hideSelectors, setHide] = useState(() => window.capture.getPrefs().hideSelectors ?? '')
+  // クリックで要素を選んで消すピックモードの状態
+  const [picking, setPicking] = useState(false)
   const { stageRef, getFrameRect } = useFrameRect(aspect)
 
   // アスペクト変更時にprefsへ保存
@@ -46,10 +48,16 @@ function App() {
     }
     window.addEventListener('keydown', onKey)
 
+    // ピックモードの状態と、ピックで追加された非表示セレクタを反映
+    const offPick = window.capture.onPickState((p) => setPicking(p))
+    const offHide = window.capture.onHideSelectorsChanged((sel) => setHide(sel))
+
     return () => {
       offError()
       offUrl()
       window.removeEventListener('keydown', onKey)
+      offPick()
+      offHide()
     }
   }, [])
 
@@ -116,12 +124,26 @@ function App() {
           {/* 機能6: Hide elements セクション */}
           <section className="space-y-3 border-t border-border px-5 py-5">
             <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Hide elements</h2>
+            <Button
+              size="sm"
+              className="w-full"
+              variant={picking ? 'destructive' : 'default'}
+              onClick={() => (picking ? window.capture.stopPick() : window.capture.startPick())}
+            >
+              <MousePointerClick />
+              {picking ? 'Click an element… (Esc)' : 'Pick element'}
+            </Button>
             <Input
               value={hideSelectors}
               onChange={(e) => setHide(e.target.value)}
               placeholder="CSS selectors e.g. header, .menu"
               className="h-8"
             />
+            {hideSelectors && (
+              <Button size="sm" variant="ghost" className="w-full" onClick={() => setHide('')}>
+                Clear
+              </Button>
+            )}
           </section>
         </aside>
       </div>

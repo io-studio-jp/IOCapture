@@ -3,7 +3,16 @@ import { writeFile } from 'fs/promises'
 import { IPC } from '../shared/ipc-types'
 import type { LoadUrlArgs, SetFrameRectArgs, CaptureStillArgs, ConvertToMp4Args, SaveBlobArgs } from '../shared/ipc-types'
 import type { Prefs } from '../shared/ipc-types'
-import { loadArtworkUrl, setArtworkRect, goBack, goForward, reloadArtwork, setHideSelectors } from './artworkView'
+import {
+  loadArtworkUrl,
+  setArtworkRect,
+  goBack,
+  goForward,
+  reloadArtwork,
+  setHideSelectors,
+  startPicking,
+  stopPicking,
+} from './artworkView'
 import { captureStill } from './capture'
 import { convertToMp4 } from './ffmpeg'
 import { getLastUrl, getPrefs, setPrefs } from './state'
@@ -44,4 +53,6 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
 
   // 機能6: CSS非表示
   ipcMain.on(IPC.setHideSelectors, (_e, sel: string) => setHideSelectors(sel))
+  ipcMain.on(IPC.startPick, () => startPicking())
+  ipcMain.on(IPC.stopPick, () => stopPicking())
 }

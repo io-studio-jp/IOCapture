@@ -17,6 +17,8 @@ export const IPC = {
   setPrefs: 'state:setPrefs',
   // 機能6: CSS非表示
   setHideSelectors: 'artwork:setHideSelectors',
+  startPick: 'artwork:startPick',
+  stopPick: 'artwork:stopPick',
 } as const
 
 export type LoadUrlArgs = { url: string }
