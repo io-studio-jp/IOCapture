@@ -1,9 +1,10 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
+import type { Prefs } from '../shared/ipc-types'
 
 export type WindowBounds = { x: number; y: number; width: number; height: number }
-type State = { lastUrl?: string; windowBounds?: WindowBounds }
+type State = { lastUrl?: string; windowBounds?: WindowBounds; prefs?: Prefs }
 
 function file(): string {
   return join(app.getPath('userData'), 'state.json')
@@ -42,5 +43,16 @@ export function getWindowBounds(): WindowBounds | null {
 export function setWindowBounds(bounds: WindowBounds): void {
   const s = read()
   s.windowBounds = bounds
+  write(s)
+}
+
+// 機能3: プリセット記憶
+export function getPrefs(): Prefs {
+  return read().prefs ?? {}
+}
+
+export function setPrefs(p: Prefs): void {
+  const s = read()
+  s.prefs = { ...s.prefs, ...p }
   write(s)
 }
