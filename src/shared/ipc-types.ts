@@ -6,6 +6,8 @@ export const IPC = {
   getLastUrl: 'artwork:getLastUrl',
   setFrameRect: 'artwork:setFrameRect',
   captureStill: 'capture:still',
+  captureStillTo: 'capture:stillTo',
+  chooseFolder: 'file:chooseFolder',
   convertToMp4: 'video:convertToMp4',
   saveBlob: 'file:saveBlob',
   startFrameCapture: 'video:startFrameCapture',
@@ -32,6 +34,7 @@ export type CaptureStillArgs = { target: TargetSize; transparent: boolean }
 export type CaptureStillResult =
   | { ok: true; savedPath: string; width: number; height: number }
   | { ok: false; error: string }
+export type CaptureStillToArgs = { target: TargetSize; dir: string; name: string }
 export type ConvertToMp4Args = { webmPath: string }
 export type ConvertToMp4Result = { ok: true; mp4Path: string } | { ok: false; error: string }
 export type SaveBlobArgs = { data: ArrayBuffer; defaultName: string }
@@ -56,4 +59,7 @@ export type Prefs = {
   stillTimer?: number
   videoTimer?: number
   includeCursor?: boolean
+  outputDir?: string
+  intervalCount?: number
+  intervalSec?: number
 }

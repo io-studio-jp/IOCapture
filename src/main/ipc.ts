@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow, dialog, shell } from 'electron'
 import { writeFile } from 'fs/promises'
 import { IPC } from '../shared/ipc-types'
-import type { LoadUrlArgs, SetFrameRectArgs, CaptureStillArgs, ConvertToMp4Args, SaveBlobArgs } from '../shared/ipc-types'
+import type { LoadUrlArgs, SetFrameRectArgs, CaptureStillArgs, CaptureStillToArgs, ConvertToMp4Args, SaveBlobArgs } from '../shared/ipc-types'
 import type { Prefs } from '../shared/ipc-types'
 import {
   loadArtworkUrl,
@@ -13,7 +13,7 @@ import {
   startPicking,
   stopPicking,
 } from './artworkView'
-import { captureStill } from './capture'
+import { captureStill, captureStillTo } from './capture'
 import { convertToMp4, saveWebmAsMp4 } from './ffmpeg'
 import { startFrameCapture, stopFrameCapture } from './frameRecorder'
 import { getLastUrl, getPrefs, setPrefs } from './state'
@@ -32,6 +32,11 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
   })
 
   ipcMain.handle(IPC.captureStill, (_e, args: CaptureStillArgs) => captureStill(args))
+  ipcMain.handle(IPC.captureStillTo, (_e, args: CaptureStillToArgs) => captureStillTo(args))
+  ipcMain.handle(IPC.chooseFolder, async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
+    return canceled || !filePaths[0] ? null : filePaths[0]
+  })
 
   ipcMain.handle(IPC.startFrameCapture, (_e, args: StartFrameCaptureArgs) =>
     startFrameCapture(args.target, args.fps, args.includeCursor),

@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC } from '../shared/ipc-types'
 import type {
-  CaptureStillArgs, CaptureStillResult,
+  CaptureStillArgs, CaptureStillResult, CaptureStillToArgs,
   ConvertToMp4Args, ConvertToMp4Result,
   SaveBlobArgs, SaveBlobResult,
   StartFrameCaptureResult,
@@ -18,6 +18,9 @@ const api = {
   setFrameRect: (rect: Rect) => ipcRenderer.send(IPC.setFrameRect, { rect }),
   captureStill: (args: CaptureStillArgs): Promise<CaptureStillResult> =>
     ipcRenderer.invoke(IPC.captureStill, args),
+  captureStillTo: (args: CaptureStillToArgs): Promise<CaptureStillResult> =>
+    ipcRenderer.invoke(IPC.captureStillTo, args),
+  chooseFolder: (): Promise<string | null> => ipcRenderer.invoke(IPC.chooseFolder),
   convertToMp4: (args: ConvertToMp4Args): Promise<ConvertToMp4Result> =>
     ipcRenderer.invoke(IPC.convertToMp4, args),
   saveBlob: (args: SaveBlobArgs): Promise<SaveBlobResult> =>

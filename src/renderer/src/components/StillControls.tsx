@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { Aspect } from '../../../shared/aspect'
 import { targetFromLongEdge, targetFromWidthCm } from '../../../shared/resolution'
 import { capToGpuLimit } from '../../../shared/dpr'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Camera } from 'lucide-react'
+import { Camera, FolderOpen, Layers } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function StillControls({ aspect }: { aspect: Aspect }) {
@@ -19,6 +19,21 @@ export function StillControls({ aspect }: { aspect: Aspect }) {
   const setTimer = (v: number): void => {
     setTimerState(v)
     window.capture.setPrefs({ stillTimer: v })
+  }
+
+  // 連続撮影（インターバル）
+  const [outputDir, setOutputDir] = useState(() => window.capture.getPrefs().outputDir ?? '')
+  const [intervalCount, setIntervalCountState] = useState(() => window.capture.getPrefs().intervalCount ?? 10)
+  const [intervalSec, setIntervalSecState] = useState(() => window.capture.getPrefs().intervalSec ?? 3)
+  const [running, setRunning] = useState(false)
+  const runningRef = useRef(false)
+  const setIntervalCount = (v: number): void => {
+    setIntervalCountState(v)
+    window.capture.setPrefs({ intervalCount: v })
+  }
+  const setIntervalSec = (v: number): void => {
+    setIntervalSecState(v)
+    window.capture.setPrefs({ intervalSec: v })
   }
 
   // 各state変更時にprefsへ保存するラッパー
@@ -70,6 +85,59 @@ export function StillControls({ aspect }: { aspect: Aspect }) {
     else if (res.error !== 'canceled') toast.error(`Failed: ${res.error}`)
   }
 
+  const currentTarget = (): { width: number; height: number } => {
+    const raw = mode === 'px' ? targetFromLongEdge(aspect, longEdge) : targetFromWidthCm(aspect, widthCm, dpi)
+    return capToGpuLimit(raw).size
+  }
+
+  const chooseFolder = async (): Promise<string | null> => {
+    const dir = await window.capture.chooseFolder()
+    if (dir) {
+      setOutputDir(dir)
+      window.capture.setPrefs({ outputDir: dir })
+    }
+    return dir
+  }
+
+  const onInterval = async (): Promise<void> => {
+    if (running) {
+      runningRef.current = false
+      return
+    }
+    let dir = outputDir
+    if (!dir) {
+      dir = (await chooseFolder()) ?? ''
+      if (!dir) return
+    }
+    const target = currentTarget()
+    const base = Date.now()
+    runningRef.current = true
+    setRunning(true)
+    let saved = 0
+    for (let i = 1; i <= intervalCount && runningRef.current; i++) {
+      const name = `capture-${base}-${String(i).padStart(3, '0')}.png`
+      const res = await window.capture.captureStillTo({ target, dir, name })
+      if (res.ok) saved++
+      toast.message(`Shot ${i}/${intervalCount}`, { id: 'interval' })
+      // 次の撮影まで待機（停止に素早く反応するよう小刻みにチェック）。
+      if (i < intervalCount) {
+        const until = Date.now() + intervalSec * 1000
+        while (Date.now() < until && runningRef.current) {
+          await new Promise((r) => setTimeout(r, 100))
+        }
+      }
+    }
+    runningRef.current = false
+    setRunning(false)
+    toast.dismiss('interval')
+    toast.success(`Saved ${saved} shots`, {
+      description: dir.split('/').pop(),
+      action: { label: 'Reveal', onClick: () => window.capture.revealFile(dir) },
+    })
+  }
+
+  const folderName = outputDir ? outputDir.split('/').pop() : 'Choose folder…'
+
   return (
     <section className="space-y-3 border-t border-border px-5 py-5">
       <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Still</h2>
@@ -113,10 +181,33 @@ export function StillControls({ aspect }: { aspect: Aspect }) {
           ))}
         </div>
       </div>
-      <Button className="w-full" onClick={onCapture}>
+      <Button className="w-full" onClick={onCapture} disabled={running}>
         <Camera />
         Capture Still
       </Button>
+
+      {/* 連続撮影（インターバル） */}
+      <div className="space-y-2 border-t border-border pt-3">
+        <Label className="text-xs text-muted-foreground">Interval (auto-save)</Label>
+        <Button size="sm" variant="secondary" className="w-full justify-start" onClick={chooseFolder} disabled={running}>
+          <FolderOpen />
+          <span className="truncate">{folderName}</span>
+        </Button>
+        <div className="flex gap-2">
+          <div className="flex-1 space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Count</Label>
+            <Input type="number" min={1} value={intervalCount} onChange={(e) => setIntervalCount(+e.target.value)} disabled={running} />
+          </div>
+          <div className="flex-1 space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Every (s)</Label>
+            <Input type="number" min={0} step="0.5" value={intervalSec} onChange={(e) => setIntervalSec(+e.target.value)} disabled={running} />
+          </div>
+        </div>
+        <Button className="w-full" variant={running ? 'destructive' : 'default'} onClick={onInterval}>
+          <Layers />
+          {running ? 'Stop' : 'Start interval'}
+        </Button>
+      </div>
     </section>
   )
 }
