@@ -50,6 +50,7 @@ export async function startRecording(
         rec.onstop = () => {
           cancelAnimationFrame(raf)
           stream.getTracks().forEach((t) => t.stop())
+          outStream.getTracks().forEach((t) => t.stop())
           resolve({ blob: new Blob(chunks, { type: 'video/webm' }), hadAudio })
         }
         rec.stop()

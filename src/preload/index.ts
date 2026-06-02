@@ -17,8 +17,11 @@ const api = {
     ipcRenderer.invoke(IPC.convertToMp4, args),
   saveBlob: (args: SaveBlobArgs): Promise<SaveBlobResult> =>
     ipcRenderer.invoke(IPC.saveBlob, args),
-  onLoadError: (cb: (info: { code: number; desc: string; url: string }) => void) =>
-    ipcRenderer.on('artwork:loadError', (_e, info) => cb(info)),
+  onLoadError: (cb: (info: { code: number; desc: string; url: string }) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, info: { code: number; desc: string; url: string }): void => cb(info)
+    ipcRenderer.on('artwork:loadError', handler)
+    return (): void => { ipcRenderer.removeListener('artwork:loadError', handler) }
+  },
 }
 
 if (process.contextIsolated) {

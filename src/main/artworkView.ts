@@ -2,6 +2,7 @@ import { WebContentsView, BrowserWindow } from 'electron'
 import type { Rect } from '../shared/frameRect'
 
 let view: WebContentsView | null = null
+let lastRect: Rect | null = null
 
 export function ensureArtworkView(win: BrowserWindow): WebContentsView {
   if (view) return view
@@ -10,6 +11,7 @@ export function ensureArtworkView(win: BrowserWindow): WebContentsView {
   view.webContents.on('did-fail-load', (_e, code, desc, url) => {
     win.webContents.send('artwork:loadError', { code, desc, url })
   })
+  if (lastRect) view.setBounds(lastRect)
   return view
 }
 
@@ -19,6 +21,7 @@ export function loadArtworkUrl(win: BrowserWindow, url: string): void {
 }
 
 export function setArtworkRect(rect: Rect): void {
+  lastRect = rect
   view?.setBounds(rect)
 }
 
