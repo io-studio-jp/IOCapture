@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: tmp-scaffold
+productName: record
 directories:
   buildResources: build
 files:
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: tmp-scaffold
+  executableName: record
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
