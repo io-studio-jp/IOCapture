@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: record
+appId: io.uurr.iocapture
+productName: IOCapture
 directories:
   buildResources: build
 files:
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: record
+  executableName: IOCapture
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

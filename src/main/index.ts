@@ -16,7 +16,7 @@ function createWindow(): void {
     ...(saved ? { x: saved.x, y: saved.y } : {}),
     show: false,
     autoHideMenuBar: true,
-    title: 'record',
+    title: 'IOCapture',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -54,7 +54,12 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('io.uurr.iocapture')
+
+  // 開発時もDockアイコンをアプリのものにする（macOS）
+  if (process.platform === 'darwin') {
+    app.dock?.setIcon(icon)
+  }
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

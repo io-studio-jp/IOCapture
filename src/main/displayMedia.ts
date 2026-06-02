@@ -6,7 +6,7 @@ export function registerDisplayMediaHandler(): void {
     async (_request, callback) => {
       try {
         const sources = await desktopCapturer.getSources({ types: ['window', 'screen'] })
-        const own = sources.find((s) => /record|capture/i.test(s.name)) ?? sources[0]
+        const own = sources.find((s) => /iocapture|capture|record/i.test(s.name)) ?? sources[0]
         if (!own) {
           // ソースが取れない（権限なし等）。空で返してrendererのgetDisplayMediaを拒否させる。
           callback({})

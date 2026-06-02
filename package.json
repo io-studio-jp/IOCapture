@@ -1,10 +1,10 @@
 {
-  "name": "record",
+  "name": "iocapture",
   "version": "1.0.0",
-  "description": "An Electron application with React and TypeScript",
+  "description": "Capture WebGL / generative artworks at controlled aspect ratio and resolution.",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "Chiaki Uehira",
+  "homepage": "https://uurr.io",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
