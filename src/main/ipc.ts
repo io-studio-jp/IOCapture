@@ -14,7 +14,7 @@ import {
   stopPicking,
 } from './artworkView'
 import { captureStill } from './capture'
-import { convertToMp4 } from './ffmpeg'
+import { convertToMp4, saveWebmAsMp4 } from './ffmpeg'
 import { startFrameCapture, stopFrameCapture } from './frameRecorder'
 import { getLastUrl, getPrefs, setPrefs } from './state'
 import type { StartFrameCaptureArgs, StopFrameCaptureArgs } from '../shared/ipc-types'
@@ -39,6 +39,7 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
   ipcMain.handle(IPC.stopFrameCapture, (_e, args: StopFrameCaptureArgs) =>
     stopFrameCapture(args.audio),
   )
+  ipcMain.handle(IPC.saveWebmAsMp4, (_e, data: ArrayBuffer) => saveWebmAsMp4(data))
 
   ipcMain.handle(IPC.convertToMp4, (_e, args: ConvertToMp4Args) => convertToMp4(args))
 

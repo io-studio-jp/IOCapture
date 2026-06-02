@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { Aspect } from '../../../shared/aspect'
 import type { Rect } from '../../../shared/frameRect'
 import { videoPresetsFor } from '../../../shared/videoResolution'
-import { startRecording, type RecordHandle } from '../lib/recorder'
+import { startRecording, startWindowRecording, type RecordHandle } from '../lib/recorder'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Circle, Square } from 'lucide-react'
+import { Circle, Square, MousePointer2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function VideoControls({
@@ -20,12 +20,20 @@ export function VideoControls({
   const [recording, setRecording] = useState(false)
   const [counting, setCounting] = useState(false)
   const [timer, setTimerState] = useState(() => window.capture.getPrefs().videoTimer ?? 0)
+  // カーソルを録画に含めるか（ON=ウィンドウキャプチャ方式）
+  const [includeCursor, setIncludeCursorState] = useState(() => window.capture.getPrefs().includeCursor ?? false)
   const handleRef = useRef<RecordHandle | null>(null)
 
   const setTimer = (v: number): void => {
     setTimerState(v)
     window.capture.setPrefs({ videoTimer: v })
   }
+  const toggleIncludeCursor = (): void =>
+    setIncludeCursorState((v) => {
+      const next = !v
+      window.capture.setPrefs({ includeCursor: next })
+      return next
+    })
 
   // 録画経過時間
   const [elapsed, setElapsed] = useState(0)
@@ -47,7 +55,12 @@ export function VideoControls({
     const preset = presets.find((p) => p.label === presetLabel)!
     const target = preset.size ?? { width: rect.width, height: rect.height }
     try {
-      handleRef.current = await startRecording(target)
+      if (includeCursor) {
+        const inset = await window.capture.getContentInset()
+        handleRef.current = await startWindowRecording(rect, target, inset)
+      } else {
+        handleRef.current = await startRecording(target)
+      }
       setRecording(true)
       if (!handleRef.current.hadAudio) {
         toast.warning('Recording without audio. Grant Screen Recording permission for system audio.')
@@ -117,6 +130,18 @@ export function VideoControls({
         </Button>
       )}
       {presetSizeLabel && <p className="text-xs text-muted-foreground">{presetSizeLabel}</p>}
+
+      {/* カーソルを録画に含めるか */}
+      <Button
+        size="sm"
+        className="w-full"
+        variant={includeCursor ? 'default' : 'secondary'}
+        onClick={toggleIncludeCursor}
+        disabled={recording || counting}
+      >
+        <MousePointer2 />
+        {includeCursor ? 'Cursor in video: on' : 'Cursor in video: off'}
+      </Button>
 
       {/* カウントダウンタイマー */}
       <div className="space-y-1.5">

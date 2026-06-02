@@ -10,6 +10,7 @@ export const IPC = {
   saveBlob: 'file:saveBlob',
   startFrameCapture: 'video:startFrameCapture',
   stopFrameCapture: 'video:stopFrameCapture',
+  saveWebmAsMp4: 'video:saveWebmAsMp4',
   // 機能2: ナビゲーション
   goBack: 'artwork:goBack',
   goForward: 'artwork:goForward',
@@ -53,4 +54,5 @@ export type Prefs = {
   hideCursor?: boolean
   stillTimer?: number
   videoTimer?: number
+  includeCursor?: boolean
 }

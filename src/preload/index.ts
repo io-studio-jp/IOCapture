@@ -48,6 +48,8 @@ const api = {
     ipcRenderer.invoke(IPC.startFrameCapture, { target, fps }),
   stopFrameCapture: (audio: ArrayBuffer | null): Promise<StopFrameCaptureResult> =>
     ipcRenderer.invoke(IPC.stopFrameCapture, { audio }),
+  saveWebmAsMp4: (data: ArrayBuffer): Promise<StopFrameCaptureResult> =>
+    ipcRenderer.invoke(IPC.saveWebmAsMp4, data),
   onPickState: (cb: (picking: boolean) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, picking: boolean): void => cb(picking)
     ipcRenderer.on('artwork:pickState', handler)
