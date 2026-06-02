@@ -78,6 +78,13 @@ export function loadArtworkUrl(win: BrowserWindow, url: string): void {
   v.webContents.loadURL(normalizeUrl(url))
 }
 
+// ウィンドウを閉じると作品ビューのwebContentsも破棄される。古い参照を捨てて、
+// 次にウィンドウを開いたとき ensureArtworkView が新しいビューを作り直せるようにする。
+export function resetArtworkView(): void {
+  view = null
+  picking = false
+}
+
 export function setArtworkRect(rect: Rect): void {
   lastRect = rect
   view?.setBounds(rect)

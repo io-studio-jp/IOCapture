@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { ensureArtworkView } from './artworkView'
+import { ensureArtworkView, resetArtworkView } from './artworkView'
 import { registerIpc } from './ipc'
 import { registerDisplayMediaHandler } from './displayMedia'
 import { getWindowBounds, setWindowBounds } from './state'
@@ -29,6 +29,9 @@ function createWindow(): void {
   mainWindow.on('resized', saveBounds)
   mainWindow.on('moved', saveBounds)
   mainWindow.on('close', saveBounds)
+
+  // ウィンドウが閉じられたら作品ビューの参照を捨てる（再オープンで作り直すため）。
+  mainWindow.on('closed', () => resetArtworkView())
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
