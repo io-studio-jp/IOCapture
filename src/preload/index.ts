@@ -8,6 +8,7 @@ import type {
   StartFrameCaptureResult,
   StopFrameCaptureResult,
   Prefs,
+  UpdateInfo,
 } from '../shared/ipc-types'
 import type { Rect } from '../shared/frameRect'
 import type { TargetSize } from '../shared/resolution'
@@ -48,6 +49,8 @@ const api = {
   stopPick: () => ipcRenderer.send(IPC.stopPick),
   getContentInset: (): Promise<{ x: number; y: number }> => ipcRenderer.invoke(IPC.getContentInset),
   revealFile: (path: string) => ipcRenderer.send(IPC.revealFile, path),
+  openExternal: (url: string) => ipcRenderer.send(IPC.openExternal, url),
+  checkUpdate: (): Promise<UpdateInfo> => ipcRenderer.invoke(IPC.checkUpdate),
   startFrameCapture: (
     target: TargetSize,
     fps: number,

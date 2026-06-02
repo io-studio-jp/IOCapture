@@ -26,7 +26,11 @@ export const IPC = {
   stopPick: 'artwork:stopPick',
   getContentInset: 'window:getContentInset',
   revealFile: 'file:reveal',
+  openExternal: 'shell:openExternal',
+  checkUpdate: 'app:checkUpdate',
 } as const
+
+export type UpdateInfo = { update: boolean; version?: string; url?: string }
 
 export type LoadUrlArgs = { url: string }
 export type SetFrameRectArgs = { rect: Rect }

@@ -17,6 +17,7 @@ import { captureStill, captureStillTo } from './capture'
 import { convertToMp4, saveWebmAsMp4 } from './ffmpeg'
 import { startFrameCapture, stopFrameCapture } from './frameRecorder'
 import { getLastUrl, getPrefs, setPrefs } from './state'
+import { checkForUpdate } from './updater'
 import type { StartFrameCaptureArgs, StopFrameCaptureArgs } from '../shared/ipc-types'
 
 export function registerIpc(getWindow: () => BrowserWindow): void {
@@ -71,6 +72,10 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
   ipcMain.on(IPC.startPick, () => startPicking())
   ipcMain.on(IPC.stopPick, () => stopPicking())
   ipcMain.on(IPC.revealFile, (_e, path: string) => shell.showItemInFolder(path))
+  ipcMain.on(IPC.openExternal, (_e, url: string) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url)
+  })
+  ipcMain.handle(IPC.checkUpdate, () => checkForUpdate())
 
   // 動画クロップ用: ウィンドウ外枠とコンテンツ領域の差（≒タイトルバー高さ）。
   // desktopCapturerはタイトルバー込みでウィンドウを撮るため、この分だけ原点をずらす。

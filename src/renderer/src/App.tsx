@@ -39,6 +39,17 @@ function App() {
       }
     })
 
+    // 新しいバージョンがあれば通知（ダウンロードページを開く）。
+    window.capture.checkUpdate().then((u) => {
+      if (u.update && u.url) {
+        const url = u.url
+        toast(`新しいバージョン ${u.version} があります`, {
+          duration: 12000,
+          action: { label: 'Download', onClick: () => window.capture.openExternal(url) },
+        })
+      }
+    })
+
     // 機能2: キーボードショートカット（Cmd/Ctrl + [ / ] / R）
     const onKey = (e: KeyboardEvent): void => {
       if (!(e.metaKey || e.ctrlKey)) return
