@@ -4,7 +4,15 @@
   "description": "Capture WebGL / generative artworks at controlled aspect ratio and resolution.",
   "main": "./out/main/index.js",
   "author": "Chiaki Uehira",
-  "homepage": "https://uurr.io",
+  "license": "MIT",
+  "homepage": "https://github.com/io-studio-jp/IOCapture",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/io-studio-jp/IOCapture.git"
+  },
+  "bugs": {
+    "url": "https://github.com/io-studio-jp/IOCapture/issues"
+  },
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
