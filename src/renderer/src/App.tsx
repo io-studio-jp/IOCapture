@@ -34,9 +34,9 @@ function App() {
       <div className="flex flex-1 overflow-hidden">
         <div ref={stageRef} className="relative flex-1 bg-black" />
         <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-l border-border bg-card">
-          <section className="space-y-4 px-5 py-6">
+          <section className="space-y-3 px-5 py-5">
             <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">比率</h2>
-            <div className="grid grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-4 gap-2">
               {ASPECT_PRESETS.map((p) => (
                 <Button
                   key={p.label}
@@ -49,7 +49,7 @@ function App() {
                 </Button>
               ))}
             </div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <Input
                 value={customAspect}
                 onChange={(e) => setCustomAspect(e.target.value)}

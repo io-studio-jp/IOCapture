@@ -43,9 +43,9 @@ export function VideoControls({
   const matchFrame = presets.find((p) => p.size === null)
 
   return (
-    <section className="space-y-4 border-t border-border px-5 py-6">
+    <section className="space-y-3 border-t border-border px-5 py-5">
       <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">動画</h2>
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-3 gap-2">
         {fixed.map((p) => (
           <Button
             key={p.label}
@@ -68,7 +68,7 @@ export function VideoControls({
           {matchFrame.label}
         </Button>
       )}
-      <Button className="mt-2 w-full" variant={recording ? 'destructive' : 'default'} onClick={onToggle}>
+      <Button className="w-full" variant={recording ? 'destructive' : 'default'} onClick={onToggle}>
         {recording ? '■ 停止' : '● 録画'}
       </Button>
     </section>
