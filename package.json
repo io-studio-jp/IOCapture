@@ -1,7 +1,7 @@
 {
   "name": "iocapture",
   "version": "1.0.2",
-  "description": "Capture WebGL / generative artworks at controlled aspect ratio and resolution.",
+  "description": "Capture screenshots and video of web pages and interactive content, with controlled aspect ratio and resolution.",
   "main": "./out/main/index.js",
   "author": "Chiaki Uehira",
   "license": "MIT",
