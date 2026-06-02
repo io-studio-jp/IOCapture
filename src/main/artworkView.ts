@@ -4,16 +4,28 @@ import type { Rect } from '../shared/frameRect'
 let view: WebContentsView | null = null
 let lastRect: Rect | null = null
 
+// 作品ページのスクロールバーを隠す（スクロール自体は可能）。macOSのオーバーレイ
+// スクロールバーはレイアウト幅を取らないため、構図には影響しない。
+const HIDE_SCROLLBAR_CSS = `
+  ::-webkit-scrollbar { width: 0 !important; height: 0 !important; background: transparent !important; }
+  html { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+`
+
 export function ensureArtworkView(win: BrowserWindow): WebContentsView {
   if (view) return view
   view = new WebContentsView()
   win.contentView.addChildView(view)
-  view.webContents.on('did-fail-load', (_e, code, desc, url) => {
+  const wc = view.webContents
+  wc.on('did-fail-load', (_e, code, desc, url) => {
     win.webContents.send('artwork:loadError', { code, desc, url })
   })
+  // 読み込み・遷移のたびにCSSが失われるので毎回注入する。
+  wc.on('did-finish-load', () => {
+    wc.insertCSS(HIDE_SCROLLBAR_CSS).catch(() => {})
+  })
   const sendUrl = (url: string): void => win.webContents.send('artwork:urlChanged', url)
-  view.webContents.on('did-navigate', (_e, url) => sendUrl(url))
-  view.webContents.on('did-navigate-in-page', (_e, url, isMainFrame) => {
+  wc.on('did-navigate', (_e, url) => sendUrl(url))
+  wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
     if (isMainFrame) sendUrl(url)
   })
   if (lastRect) view.setBounds(lastRect)
