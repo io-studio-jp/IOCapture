@@ -6,7 +6,7 @@ import { join } from 'path'
 import { dialog, screen, BrowserWindow } from 'electron'
 import ffmpegStatic from 'ffmpeg-static'
 import { getArtworkView } from './artworkView'
-import { drawCursor } from './cursorSprite'
+import { drawCursor, ARROW_ROWS } from './cursorSprite'
 import type { TargetSize } from '../shared/resolution'
 
 const ffmpegPath = ffmpegStatic ? ffmpegStatic.replace('app.asar', 'app.asar.unpacked') : null
@@ -82,7 +82,11 @@ export async function startFrameCapture(
   subscribed = true
 
   // 一定間隔で最新フレームを目標解像度に整えて書き込む（出力fpsを一定に保つ）。
-  const cursorScale = Math.max(2, Math.round(size.height / 540))
+  // 画面上のmacOSカーソル(約18ptの矢印)と同じ見かけサイズにする。
+  // 出力での矢印の高さ(px) = 18 * (size.height / view CSS高さ)。スプライト18行で割ってscale化。
+  const MACOS_CURSOR_CSS = 18
+  const viewCssH = view.getBounds().height || size.height
+  const cursorScale = (MACOS_CURSOR_CSS * size.height) / viewCssH / ARROW_ROWS
   writer = setInterval(() => {
     if (!latest || !ffmpeg) return
     const frame = latest.resize({ width: size.width, height: size.height, quality: 'good' })
