@@ -9,7 +9,6 @@ let mainWin: BrowserWindow | null = null
 // 機能6: CSS非表示セレクタ
 let hideSelectors = ''
 let picking = false
-let hideCursor = false
 
 // 作品ページのスクロールバーを隠す（スクロール自体は可能）。macOSのオーバーレイ
 // スクロールバーはレイアウト幅を取らないため、構図には影響しない。
@@ -42,25 +41,6 @@ function applyHide(): void {
   ).catch(() => {})
 }
 
-// 作品ページのカーソルを隠す（動画録画への写り込み対策。トグル）。
-function applyCursor(): void {
-  const wc = view?.webContents
-  if (!wc) return
-  const css = hideCursor ? '*, *::before, *::after { cursor: none !important }' : ''
-  wc.executeJavaScript(
-    `(() => {
-      let s = document.getElementById('__record_cursor__');
-      if (!s) { s = document.createElement('style'); s.id = '__record_cursor__'; (document.head || document.documentElement).appendChild(s); }
-      s.textContent = ${JSON.stringify(css)};
-    })()`,
-  ).catch(() => {})
-}
-
-export function setHideCursor(v: boolean): void {
-  hideCursor = v
-  applyCursor()
-}
-
 export function ensureArtworkView(win: BrowserWindow): WebContentsView {
   mainWin = win
   if (view) return view
@@ -74,7 +54,6 @@ export function ensureArtworkView(win: BrowserWindow): WebContentsView {
   wc.on('did-finish-load', () => {
     wc.insertCSS(HIDE_SCROLLBAR_CSS).catch(() => {})
     applyHide()
-    applyCursor()
   })
   const sendUrl = (url: string): void => {
     setLastUrl(url)

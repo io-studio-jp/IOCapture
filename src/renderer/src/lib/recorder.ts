@@ -9,9 +9,16 @@ export async function startRecording(
   frameRect: Rect,
   target: TargetSize,
   inset: { x: number; y: number } = { x: 0, y: 0 },
-  fps = 30,
+  hideCursor = false,
+  fps = 60,
 ): Promise<RecordHandle> {
-  const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+  // 高いフレームレートを要求し、hideCursor時はOSのキャプチャ設定でカーソルを
+  // ストリームから除外する（画面上のカーソルは消えない＝操作はしやすいまま、録画にだけ入らない）。
+  const video = {
+    frameRate: { ideal: fps },
+    ...(hideCursor ? { cursor: 'never' } : {}),
+  } as MediaTrackConstraints
+  const stream = await navigator.mediaDevices.getDisplayMedia({ video, audio: true })
   const hadAudio = stream.getAudioTracks().length > 0
 
   const videoEl = document.createElement('video')
@@ -42,8 +49,14 @@ export async function startRecording(
   const outStream = canvas.captureStream(fps)
   if (hadAudio) outStream.addTrack(stream.getAudioTracks()[0])
 
+  // 高解像度でもfpsを保ちやすいよう、軽いVP8＋十分なビットレートを指定する。
+  const pixels = target.width * target.height
+  const bitrate = Math.min(40_000_000, Math.max(8_000_000, Math.round(pixels * fps * 0.12)))
+  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+    ? 'video/webm;codecs=vp8,opus'
+    : 'video/webm'
   const chunks: Blob[] = []
-  const rec = new MediaRecorder(outStream, { mimeType: 'video/webm;codecs=vp9,opus' })
+  const rec = new MediaRecorder(outStream, { mimeType: mime, videoBitsPerSecond: bitrate })
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
   rec.start(100)
 

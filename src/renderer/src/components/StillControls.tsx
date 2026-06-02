@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { Aspect } from '../../../shared/aspect'
 import { targetFromLongEdge, targetFromWidthCm } from '../../../shared/resolution'
 import { capToGpuLimit } from '../../../shared/dpr'
@@ -14,6 +14,12 @@ export function StillControls({ aspect }: { aspect: Aspect }) {
   const [longEdge, setLongEdgeState] = useState(() => window.capture.getPrefs().longEdge ?? 3000)
   const [widthCm, setWidthCmState] = useState(() => window.capture.getPrefs().widthCm ?? 10)
   const [dpi, setDpiState] = useState(() => window.capture.getPrefs().dpi ?? 300)
+  // セルフタイマー（秒）。0でオフ。
+  const [timer, setTimerState] = useState(() => window.capture.getPrefs().stillTimer ?? 0)
+  const setTimer = (v: number): void => {
+    setTimerState(v)
+    window.capture.setPrefs({ stillTimer: v })
+  }
 
   // 各state変更時にprefsへ保存するラッパー
   const setMode = (m: 'px' | 'cm'): void => {
@@ -39,10 +45,16 @@ export function StillControls({ aspect }: { aspect: Aspect }) {
     : targetFromWidthCm(aspect, widthCm, dpi)
   const { size: target } = capToGpuLimit(rawTarget)
 
-  // aspect変更時もprefsは不要（App.tsxで管理）
-  useEffect(() => {}, [aspect])
-
   const onCapture = async () => {
+    // セルフタイマー: 指定秒だけカウントダウン（同一トーストを更新）。
+    if (timer > 0) {
+      const id = 'still-timer'
+      for (let s = timer; s > 0; s--) {
+        toast.message(`Capturing in ${s}…`, { id })
+        await new Promise((r) => setTimeout(r, 1000))
+      }
+      toast.dismiss(id)
+    }
     const raw =
       mode === 'px'
         ? targetFromLongEdge(aspect, longEdge)
@@ -80,6 +92,23 @@ export function StillControls({ aspect }: { aspect: Aspect }) {
       )}
       {/* 機能4: 出力解像度の数値表示 */}
       <p className="text-xs text-muted-foreground">→ {target.width}×{target.height} px</p>
+      {/* セルフタイマー */}
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">Timer</Label>
+        <div className="grid grid-cols-4 gap-2">
+          {[0, 3, 5, 10].map((s) => (
+            <Button
+              key={s}
+              size="sm"
+              className="w-full px-0"
+              variant={timer === s ? 'default' : 'secondary'}
+              onClick={() => setTimer(s)}
+            >
+              {s === 0 ? 'Off' : `${s}s`}
+            </Button>
+          ))}
+        </div>
+      </div>
       <Button className="w-full" onClick={onCapture}>
         <Camera />
         Capture Still

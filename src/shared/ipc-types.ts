@@ -20,7 +20,6 @@ export const IPC = {
   startPick: 'artwork:startPick',
   stopPick: 'artwork:stopPick',
   getContentInset: 'window:getContentInset',
-  setHideCursor: 'artwork:setHideCursor',
 } as const
 
 export type LoadUrlArgs = { url: string }
@@ -44,4 +43,5 @@ export type Prefs = {
   videoPreset?: string
   hideSelectors?: string
   hideCursor?: boolean
+  stillTimer?: number
 }

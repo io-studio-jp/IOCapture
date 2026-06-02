@@ -4,7 +4,7 @@ import type { Rect } from '../../../shared/frameRect'
 import { videoPresetsFor } from '../../../shared/videoResolution'
 import { startRecording, type RecordHandle } from '../lib/recorder'
 import { Button } from '@/components/ui/button'
-import { Circle, Square } from 'lucide-react'
+import { Circle, Square, MousePointer2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function VideoControls({
@@ -18,7 +18,17 @@ export function VideoControls({
   // 機能3: プリセット記憶 - prefsから初期値を取得
   const [presetLabel, setPresetLabelState] = useState(() => window.capture.getPrefs().videoPreset ?? '1080')
   const [recording, setRecording] = useState(false)
+  // 録画にカーソルを含めない（画面上のカーソルは表示したまま）
+  const [hideCursor, setHideCursorState] = useState(() => window.capture.getPrefs().hideCursor ?? false)
   const handleRef = useRef<RecordHandle | null>(null)
+
+  const toggleHideCursor = (): void => {
+    setHideCursorState((v) => {
+      const next = !v
+      window.capture.setPrefs({ hideCursor: next })
+      return next
+    })
+  }
 
   // 機能5: 録画経過時間
   const [elapsed, setElapsed] = useState(0)
@@ -55,7 +65,7 @@ export function VideoControls({
     const target = preset.size ?? { width: rect.width, height: rect.height }
     try {
       const inset = await window.capture.getContentInset()
-      handleRef.current = await startRecording(rect, target, inset)
+      handleRef.current = await startRecording(rect, target, inset, hideCursor)
       setRecording(true)
     } catch {
       toast.error(
@@ -106,6 +116,17 @@ export function VideoControls({
       {presetSizeLabel && (
         <p className="text-xs text-muted-foreground">{presetSizeLabel}</p>
       )}
+      {/* 録画にカーソルを含めないトグル */}
+      <Button
+        size="sm"
+        className="w-full"
+        variant={hideCursor ? 'default' : 'secondary'}
+        onClick={toggleHideCursor}
+        disabled={recording}
+      >
+        <MousePointer2 />
+        {hideCursor ? 'Cursor hidden in video' : 'Show cursor in video'}
+      </Button>
       {/* 機能5: 録画インジケータ＋経過時間 */}
       {recording && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
