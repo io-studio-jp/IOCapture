@@ -8,6 +8,7 @@ export type RecordHandle = {
 export async function startRecording(
   frameRect: Rect,
   target: TargetSize,
+  inset: { x: number; y: number } = { x: 0, y: 0 },
   fps = 30,
 ): Promise<RecordHandle> {
   const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
@@ -24,14 +25,16 @@ export async function startRecording(
   canvas.height = target.height
   const ctx = canvas.getContext('2d')!
 
+  // desktopCapturerはウィンドウ外枠（タイトルバー込み）を撮るため、frameRect（コンテンツ
+  // 領域基準のCSSpx）に inset（タイトルバー高さ等）を足してから device px に変換する。
+  const sx = (frameRect.x + inset.x) * dpr
+  const sy = (frameRect.y + inset.y) * dpr
+  const sw = frameRect.width * dpr
+  const sh = frameRect.height * dpr
+
   let raf = 0
   const draw = (): void => {
-    ctx.drawImage(
-      videoEl,
-      frameRect.x * dpr, frameRect.y * dpr,
-      frameRect.width * dpr, frameRect.height * dpr,
-      0, 0, canvas.width, canvas.height,
-    )
+    ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
     raf = requestAnimationFrame(draw)
   }
   draw()

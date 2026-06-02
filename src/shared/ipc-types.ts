@@ -19,6 +19,7 @@ export const IPC = {
   setHideSelectors: 'artwork:setHideSelectors',
   startPick: 'artwork:startPick',
   stopPick: 'artwork:stopPick',
+  getContentInset: 'window:getContentInset',
 } as const
 
 export type LoadUrlArgs = { url: string }

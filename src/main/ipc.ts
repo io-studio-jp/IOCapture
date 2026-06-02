@@ -55,4 +55,13 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
   ipcMain.on(IPC.setHideSelectors, (_e, sel: string) => setHideSelectors(sel))
   ipcMain.on(IPC.startPick, () => startPicking())
   ipcMain.on(IPC.stopPick, () => stopPicking())
+
+  // 動画クロップ用: ウィンドウ外枠とコンテンツ領域の差（≒タイトルバー高さ）。
+  // desktopCapturerはタイトルバー込みでウィンドウを撮るため、この分だけ原点をずらす。
+  ipcMain.handle(IPC.getContentInset, () => {
+    const win = getWindow()
+    const b = win.getBounds()
+    const c = win.getContentBounds()
+    return { x: c.x - b.x, y: c.y - b.y }
+  })
 }

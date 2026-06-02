@@ -40,6 +40,7 @@ const api = {
   setHideSelectors: (sel: string) => ipcRenderer.send(IPC.setHideSelectors, sel),
   startPick: () => ipcRenderer.send(IPC.startPick),
   stopPick: () => ipcRenderer.send(IPC.stopPick),
+  getContentInset: (): Promise<{ x: number; y: number }> => ipcRenderer.invoke(IPC.getContentInset),
   onPickState: (cb: (picking: boolean) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, picking: boolean): void => cb(picking)
     ipcRenderer.on('artwork:pickState', handler)

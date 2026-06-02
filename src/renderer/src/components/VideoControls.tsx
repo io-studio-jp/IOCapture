@@ -54,7 +54,8 @@ export function VideoControls({
     const preset = presets.find((p) => p.label === presetLabel)!
     const target = preset.size ?? { width: rect.width, height: rect.height }
     try {
-      handleRef.current = await startRecording(rect, target)
+      const inset = await window.capture.getContentInset()
+      handleRef.current = await startRecording(rect, target, inset)
       setRecording(true)
     } catch {
       toast.error(
