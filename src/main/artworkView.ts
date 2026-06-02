@@ -7,6 +7,9 @@ export function ensureArtworkView(win: BrowserWindow): WebContentsView {
   if (view) return view
   view = new WebContentsView()
   win.contentView.addChildView(view)
+  view.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    win.webContents.send('artwork:loadError', { code, desc, url })
+  })
   return view
 }
 

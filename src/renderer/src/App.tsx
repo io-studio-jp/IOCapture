@@ -1,15 +1,24 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ASPECT_PRESETS, parseAspect, type Aspect } from '../../shared/aspect'
 import { useFrameRect } from './lib/useFrameRect'
+import { StillControls } from './components/StillControls'
+import { VideoControls } from './components/VideoControls'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Toaster } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 
 function App() {
   const [url, setUrl] = useState('')
   const [aspect, setAspect] = useState<Aspect>({ w: 1, h: 1 })
   const [customAspect, setCustomAspect] = useState('')
-  const { stageRef } = useFrameRect(aspect)
+  const { stageRef, getFrameRect } = useFrameRect(aspect)
+
+  useEffect(() => {
+    window.capture.onLoadError((info) => {
+      toast.error(`読込失敗 (${info.code}): ${info.desc}`)
+    })
+  }, [])
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-zinc-100">
@@ -37,6 +46,8 @@ function App() {
             <Input value={customAspect} onChange={(e) => setCustomAspect(e.target.value)} placeholder="任意 W:H 例 21:9" className="h-8" />
             <Button size="sm" onClick={() => { const a = parseAspect(customAspect); if (a) setAspect(a) }}>適用</Button>
           </div>
+          <StillControls aspect={aspect} />
+          <VideoControls aspect={aspect} getFrameRect={getFrameRect} />
         </aside>
       </div>
       <Toaster />
