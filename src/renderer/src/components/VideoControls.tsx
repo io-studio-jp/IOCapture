@@ -4,7 +4,8 @@ import type { Rect } from '../../../shared/frameRect'
 import { videoPresetsFor } from '../../../shared/videoResolution'
 import { startRecording, type RecordHandle } from '../lib/recorder'
 import { Button } from '@/components/ui/button'
-import { Circle, Square, MousePointer2 } from 'lucide-react'
+import { Label } from '@/components/ui/label'
+import { Circle, Square } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function VideoControls({
@@ -15,22 +16,18 @@ export function VideoControls({
   getFrameRect: () => Rect
 }) {
   const presets = videoPresetsFor(aspect)
-  // 機能3: プリセット記憶 - prefsから初期値を取得
   const [presetLabel, setPresetLabelState] = useState(() => window.capture.getPrefs().videoPreset ?? '1080')
   const [recording, setRecording] = useState(false)
-  // 録画にカーソルを含めない（画面上のカーソルは表示したまま）
-  const [hideCursor, setHideCursorState] = useState(() => window.capture.getPrefs().hideCursor ?? false)
+  const [counting, setCounting] = useState(false)
+  const [timer, setTimerState] = useState(() => window.capture.getPrefs().videoTimer ?? 0)
   const handleRef = useRef<RecordHandle | null>(null)
 
-  const toggleHideCursor = (): void => {
-    setHideCursorState((v) => {
-      const next = !v
-      window.capture.setPrefs({ hideCursor: next })
-      return next
-    })
+  const setTimer = (v: number): void => {
+    setTimerState(v)
+    window.capture.setPrefs({ videoTimer: v })
   }
 
-  // 機能5: 録画経過時間
+  // 録画経過時間
   const [elapsed, setElapsed] = useState(0)
   useEffect(() => {
     if (!recording) { setElapsed(0); return }
@@ -40,44 +37,51 @@ export function VideoControls({
   }, [recording])
   const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`
 
-  // presetLabel変更時にprefsへ保存するラッパー
   const setPresetLabel = (label: string): void => {
     setPresetLabelState(label)
     window.capture.setPrefs({ videoPreset: label })
   }
 
-  const onToggle = async () => {
-    if (recording) {
-      const { blob, hadAudio } = await handleRef.current!.stop()
-      setRecording(false)
-      if (!hadAudio) toast.warning('Could not capture system audio (video only). Consider installing a virtual audio device.')
-      const webm = await blob.arrayBuffer()
-      const saved = await window.capture.saveBlob({ data: webm, defaultName: `capture-${Date.now()}.webm` })
-      if (saved.ok) {
-        const conv = await window.capture.convertToMp4({ webmPath: saved.path })
-        if (conv.ok) toast.success('Saved mp4', { description: conv.mp4Path.split('/').pop() })
-        else toast.error(`mp4 conversion failed (webm saved): ${conv.error}`)
-      }
-      return
-    }
+  const startNow = async (): Promise<void> => {
     const rect = getFrameRect()
     const preset = presets.find((p) => p.label === presetLabel)!
     const target = preset.size ?? { width: rect.width, height: rect.height }
     try {
-      const inset = await window.capture.getContentInset()
-      handleRef.current = await startRecording(rect, target, inset, hideCursor)
+      handleRef.current = await startRecording(target)
       setRecording(true)
-    } catch {
-      toast.error(
-        'Could not start recording. Grant Screen Recording permission (System Settings → Privacy & Security → Screen Recording) to this app, then restart.',
-      )
+      if (!handleRef.current.hadAudio) {
+        toast.warning('Recording without audio. Grant Screen Recording permission for system audio.')
+      }
+    } catch (e) {
+      toast.error(`Could not start recording: ${String(e)}`)
     }
+  }
+
+  const onToggle = async () => {
+    if (recording) {
+      setRecording(false)
+      const res = await handleRef.current!.stop()
+      if ('mp4Path' in res) toast.success('Saved mp4', { description: res.mp4Path.split('/').pop() })
+      else if (!res.canceled) toast.error(`Save failed: ${res.error}`)
+      return
+    }
+    if (counting) return
+    if (timer > 0) {
+      setCounting(true)
+      const id = 'video-timer'
+      for (let s = timer; s > 0; s--) {
+        toast.message(`Recording in ${s}…`, { id })
+        await new Promise((r) => setTimeout(r, 1000))
+      }
+      toast.dismiss(id)
+      setCounting(false)
+    }
+    await startNow()
   }
 
   const fixed = presets.filter((p) => p.size)
   const matchFrame = presets.find((p) => p.size === null)
 
-  // 機能4: 選択中プリセットのサイズ表示
   const currentPreset = presets.find((p) => p.label === presetLabel)
   const presetSizeLabel = (() => {
     if (!currentPreset) return null
@@ -112,35 +116,41 @@ export function VideoControls({
           {matchFrame.label}
         </Button>
       )}
-      {/* 機能4: プリセットサイズ表示 */}
-      {presetSizeLabel && (
-        <p className="text-xs text-muted-foreground">{presetSizeLabel}</p>
-      )}
-      {/* 録画にカーソルを含めないトグル */}
-      <Button
-        size="sm"
-        className="w-full"
-        variant={hideCursor ? 'default' : 'secondary'}
-        onClick={toggleHideCursor}
-        disabled={recording}
-      >
-        <MousePointer2 />
-        {hideCursor ? 'Cursor hidden in video' : 'Show cursor in video'}
-      </Button>
-      {/* 機能5: 録画インジケータ＋経過時間 */}
+      {presetSizeLabel && <p className="text-xs text-muted-foreground">{presetSizeLabel}</p>}
+
+      {/* カウントダウンタイマー */}
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">Timer</Label>
+        <div className="grid grid-cols-4 gap-2">
+          {[0, 3, 5, 10].map((s) => (
+            <Button
+              key={s}
+              size="sm"
+              className="w-full px-0"
+              variant={timer === s ? 'default' : 'secondary'}
+              onClick={() => setTimer(s)}
+              disabled={recording || counting}
+            >
+              {s === 0 ? 'Off' : `${s}s`}
+            </Button>
+          ))}
+        </div>
+      </div>
+
       {recording && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="size-2 animate-pulse rounded-full bg-red-500" />
           REC {mmss}
         </div>
       )}
-      <Button className="w-full" variant={recording ? 'destructive' : 'default'} onClick={onToggle}>
-        {recording ? (
-          <Square className="fill-current" />
-        ) : (
-          <Circle className="size-3 fill-current" />
-        )}
-        {recording ? 'Stop' : 'Record'}
+      <Button
+        className="w-full"
+        variant={recording ? 'destructive' : 'default'}
+        onClick={onToggle}
+        disabled={counting}
+      >
+        {recording ? <Square className="fill-current" /> : <Circle className="size-3 fill-current" />}
+        {recording ? 'Stop' : counting ? 'Starting…' : 'Record'}
       </Button>
     </section>
   )

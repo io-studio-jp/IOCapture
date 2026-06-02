@@ -8,6 +8,8 @@ export const IPC = {
   captureStill: 'capture:still',
   convertToMp4: 'video:convertToMp4',
   saveBlob: 'file:saveBlob',
+  startFrameCapture: 'video:startFrameCapture',
+  stopFrameCapture: 'video:stopFrameCapture',
   // 機能2: ナビゲーション
   goBack: 'artwork:goBack',
   goForward: 'artwork:goForward',
@@ -32,6 +34,12 @@ export type ConvertToMp4Args = { webmPath: string }
 export type ConvertToMp4Result = { ok: true; mp4Path: string } | { ok: false; error: string }
 export type SaveBlobArgs = { data: ArrayBuffer; defaultName: string }
 export type SaveBlobResult = { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+export type StartFrameCaptureArgs = { target: TargetSize; fps: number }
+export type StartFrameCaptureResult = { ok: boolean; error?: string }
+export type StopFrameCaptureArgs = { audio: ArrayBuffer | null }
+export type StopFrameCaptureResult =
+  | { ok: true; mp4Path: string }
+  | { ok: false; canceled?: boolean; error?: string }
 
 // 機能3: プリセット記憶の型
 export type Prefs = {
@@ -44,4 +52,5 @@ export type Prefs = {
   hideSelectors?: string
   hideCursor?: boolean
   stillTimer?: number
+  videoTimer?: number
 }

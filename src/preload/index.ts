@@ -5,9 +5,12 @@ import type {
   CaptureStillArgs, CaptureStillResult,
   ConvertToMp4Args, ConvertToMp4Result,
   SaveBlobArgs, SaveBlobResult,
+  StartFrameCaptureResult,
+  StopFrameCaptureResult,
   Prefs,
 } from '../shared/ipc-types'
 import type { Rect } from '../shared/frameRect'
+import type { TargetSize } from '../shared/resolution'
 
 const api = {
   loadUrl: (url: string) => ipcRenderer.invoke(IPC.loadUrl, { url }),
@@ -41,6 +44,10 @@ const api = {
   startPick: () => ipcRenderer.send(IPC.startPick),
   stopPick: () => ipcRenderer.send(IPC.stopPick),
   getContentInset: (): Promise<{ x: number; y: number }> => ipcRenderer.invoke(IPC.getContentInset),
+  startFrameCapture: (target: TargetSize, fps: number): Promise<StartFrameCaptureResult> =>
+    ipcRenderer.invoke(IPC.startFrameCapture, { target, fps }),
+  stopFrameCapture: (audio: ArrayBuffer | null): Promise<StopFrameCaptureResult> =>
+    ipcRenderer.invoke(IPC.stopFrameCapture, { audio }),
   onPickState: (cb: (picking: boolean) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, picking: boolean): void => cb(picking)
     ipcRenderer.on('artwork:pickState', handler)

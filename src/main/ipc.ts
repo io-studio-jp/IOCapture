@@ -15,7 +15,9 @@ import {
 } from './artworkView'
 import { captureStill } from './capture'
 import { convertToMp4 } from './ffmpeg'
+import { startFrameCapture, stopFrameCapture } from './frameRecorder'
 import { getLastUrl, getPrefs, setPrefs } from './state'
+import type { StartFrameCaptureArgs, StopFrameCaptureArgs } from '../shared/ipc-types'
 
 export function registerIpc(getWindow: () => BrowserWindow): void {
   ipcMain.handle(IPC.loadUrl, (_e, args: LoadUrlArgs) => {
@@ -30,6 +32,13 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
   })
 
   ipcMain.handle(IPC.captureStill, (_e, args: CaptureStillArgs) => captureStill(args))
+
+  ipcMain.handle(IPC.startFrameCapture, (_e, args: StartFrameCaptureArgs) =>
+    startFrameCapture(args.target, args.fps),
+  )
+  ipcMain.handle(IPC.stopFrameCapture, (_e, args: StopFrameCaptureArgs) =>
+    stopFrameCapture(args.audio),
+  )
 
   ipcMain.handle(IPC.convertToMp4, (_e, args: ConvertToMp4Args) => convertToMp4(args))
 
