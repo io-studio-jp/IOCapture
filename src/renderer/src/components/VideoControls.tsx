@@ -41,7 +41,7 @@ export function VideoControls({
 
   return (
     <div className="space-y-2">
-      <div className="text-xs text-zinc-400">動画</div>
+      <div className="text-xs text-muted-foreground">動画</div>
       <div className="flex flex-wrap gap-1">
         {presets.map((p) => (
           <Button key={p.label} size="sm" variant={presetLabel === p.label ? 'default' : 'secondary'} onClick={() => setPresetLabel(p.label)}>

@@ -22,15 +22,15 @@ function App() {
   }, [])
 
   return (
-    <div className="flex h-screen flex-col bg-zinc-950 text-zinc-100">
-      <header className="flex gap-2 border-b border-zinc-800 p-2">
+    <div className="flex h-screen flex-col bg-background text-foreground">
+      <header className="flex gap-2 border-b border-border p-2">
         <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." className="flex-1" />
         <Button onClick={() => window.capture.loadUrl(url)}>読込</Button>
       </header>
       <div className="flex flex-1 overflow-hidden">
         <div ref={stageRef} className="relative flex-1 bg-black" />
-        <aside className="w-64 space-y-3 overflow-y-auto border-l border-zinc-800 p-3">
-          <div className="text-xs text-zinc-400">比率</div>
+        <aside className="w-64 space-y-3 overflow-y-auto border-l border-border bg-card p-3">
+          <div className="text-xs text-muted-foreground">比率</div>
           <div className="flex flex-wrap gap-1">
             {ASPECT_PRESETS.map((p) => (
               <Button
@@ -51,7 +51,7 @@ function App() {
           <VideoControls aspect={aspect} getFrameRect={getFrameRect} />
         </aside>
       </div>
-      <Toaster />
+      <Toaster theme="dark" />
     </div>
   )
 }

@@ -27,7 +27,7 @@ export function StillControls({ aspect }: { aspect: Aspect }) {
 
   return (
     <div className="space-y-2">
-      <div className="text-xs text-zinc-400">静止画</div>
+      <div className="text-xs text-muted-foreground">静止画</div>
       <div className="flex gap-1">
         <Button size="sm" variant={mode === 'px' ? 'default' : 'secondary'} onClick={() => setMode('px')}>px</Button>
         <Button size="sm" variant={mode === 'cm' ? 'default' : 'secondary'} onClick={() => setMode('cm')}>cm/dpi</Button>
