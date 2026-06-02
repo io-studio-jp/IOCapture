@@ -36,8 +36,14 @@ export function VideoControls({
     const rect = getFrameRect()
     const preset = presets.find((p) => p.label === presetLabel)!
     const target = preset.size ?? { width: rect.width, height: rect.height }
-    handleRef.current = await startRecording(rect, target)
-    setRecording(true)
+    try {
+      handleRef.current = await startRecording(rect, target)
+      setRecording(true)
+    } catch {
+      toast.error(
+        'Could not start recording. Grant Screen Recording permission (System Settings → Privacy & Security → Screen Recording) to this app, then restart.',
+      )
+    }
   }
 
   const fixed = presets.filter((p) => p.size)
