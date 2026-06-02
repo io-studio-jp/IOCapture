@@ -22,6 +22,11 @@ const api = {
     ipcRenderer.on('artwork:loadError', handler)
     return (): void => { ipcRenderer.removeListener('artwork:loadError', handler) }
   },
+  onUrlChanged: (cb: (url: string) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, url: string): void => cb(url)
+    ipcRenderer.on('artwork:urlChanged', handler)
+    return (): void => { ipcRenderer.removeListener('artwork:urlChanged', handler) }
+  },
 }
 
 if (process.contextIsolated) {

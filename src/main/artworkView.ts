@@ -11,6 +11,11 @@ export function ensureArtworkView(win: BrowserWindow): WebContentsView {
   view.webContents.on('did-fail-load', (_e, code, desc, url) => {
     win.webContents.send('artwork:loadError', { code, desc, url })
   })
+  const sendUrl = (url: string): void => win.webContents.send('artwork:urlChanged', url)
+  view.webContents.on('did-navigate', (_e, url) => sendUrl(url))
+  view.webContents.on('did-navigate-in-page', (_e, url, isMainFrame) => {
+    if (isMainFrame) sendUrl(url)
+  })
   if (lastRect) view.setBounds(lastRect)
   return view
 }

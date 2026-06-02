@@ -15,10 +15,14 @@ function App() {
   const { stageRef, getFrameRect } = useFrameRect(aspect)
 
   useEffect(() => {
-    const off = window.capture.onLoadError((info) => {
+    const offError = window.capture.onLoadError((info) => {
       toast.error(`読込失敗 (${info.code}): ${info.desc}`)
     })
-    return off
+    const offUrl = window.capture.onUrlChanged((next) => setUrl(next))
+    return () => {
+      offError()
+      offUrl()
+    }
   }, [])
 
   return (
