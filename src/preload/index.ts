@@ -1,22 +1,32 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import { IPC } from '../shared/ipc-types'
+import type {
+  CaptureStillArgs, CaptureStillResult,
+  ConvertToMp4Args, ConvertToMp4Result,
+  SaveBlobArgs, SaveBlobResult,
+} from '../shared/ipc-types'
+import type { Rect } from '../shared/frameRect'
 
-// Custom APIs for renderer
-const api = {}
+const api = {
+  loadUrl: (url: string) => ipcRenderer.invoke(IPC.loadUrl, { url }),
+  setFrameRect: (rect: Rect) => ipcRenderer.send(IPC.setFrameRect, { rect }),
+  captureStill: (args: CaptureStillArgs): Promise<CaptureStillResult> =>
+    ipcRenderer.invoke(IPC.captureStill, args),
+  convertToMp4: (args: ConvertToMp4Args): Promise<ConvertToMp4Result> =>
+    ipcRenderer.invoke(IPC.convertToMp4, args),
+  saveBlob: (args: SaveBlobArgs): Promise<SaveBlobResult> =>
+    ipcRenderer.invoke(IPC.saveBlob, args),
+}
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
 if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
-  }
+  contextBridge.exposeInMainWorld('electron', electronAPI)
+  contextBridge.exposeInMainWorld('capture', api)
 } else {
   // @ts-ignore (define in dts)
   window.electron = electronAPI
   // @ts-ignore (define in dts)
-  window.api = api
+  window.capture = api
 }
+
+export type CaptureAPI = typeof api
