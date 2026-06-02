@@ -166,7 +166,7 @@ function App() {
       </div>
       <Toaster
         theme="dark"
-        position="top-right"
+        position="bottom-right"
         offset={16}
         style={{ '--width': '256px' } as React.CSSProperties}
       />
