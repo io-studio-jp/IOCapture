@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Aspect } from '../../../shared/aspect'
 import type { Rect } from '../../../shared/frameRect'
 import { videoPresetsFor } from '../../../shared/videoResolution'
@@ -15,9 +15,26 @@ export function VideoControls({
   getFrameRect: () => Rect
 }) {
   const presets = videoPresetsFor(aspect)
-  const [presetLabel, setPresetLabel] = useState('1080')
+  // 機能3: プリセット記憶 - prefsから初期値を取得
+  const [presetLabel, setPresetLabelState] = useState(() => window.capture.getPrefs().videoPreset ?? '1080')
   const [recording, setRecording] = useState(false)
   const handleRef = useRef<RecordHandle | null>(null)
+
+  // 機能5: 録画経過時間
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (!recording) { setElapsed(0); return }
+    const start = Date.now()
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 250)
+    return () => clearInterval(id)
+  }, [recording])
+  const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`
+
+  // presetLabel変更時にprefsへ保存するラッパー
+  const setPresetLabel = (label: string): void => {
+    setPresetLabelState(label)
+    window.capture.setPrefs({ videoPreset: label })
+  }
 
   const onToggle = async () => {
     if (recording) {
@@ -49,6 +66,15 @@ export function VideoControls({
   const fixed = presets.filter((p) => p.size)
   const matchFrame = presets.find((p) => p.size === null)
 
+  // 機能4: 選択中プリセットのサイズ表示
+  const currentPreset = presets.find((p) => p.label === presetLabel)
+  const presetSizeLabel = (() => {
+    if (!currentPreset) return null
+    if (currentPreset.size) return `→ ${currentPreset.size.width}×${currentPreset.size.height}`
+    const rect = getFrameRect()
+    return `→ ${rect.width}×${rect.height} (frame)`
+  })()
+
   return (
     <section className="space-y-3 border-t border-border px-5 py-5">
       <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Video</h2>
@@ -74,6 +100,17 @@ export function VideoControls({
         >
           {matchFrame.label}
         </Button>
+      )}
+      {/* 機能4: プリセットサイズ表示 */}
+      {presetSizeLabel && (
+        <p className="text-xs text-muted-foreground">{presetSizeLabel}</p>
+      )}
+      {/* 機能5: 録画インジケータ＋経過時間 */}
+      {recording && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="size-2 animate-pulse rounded-full bg-red-500" />
+          REC {mmss}
+        </div>
       )}
       <Button className="w-full" variant={recording ? 'destructive' : 'default'} onClick={onToggle}>
         {recording ? (

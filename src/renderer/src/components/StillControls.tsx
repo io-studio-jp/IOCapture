@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Aspect } from '../../../shared/aspect'
 import { targetFromLongEdge, targetFromWidthCm } from '../../../shared/resolution'
 import { capToGpuLimit } from '../../../shared/dpr'
@@ -9,10 +9,38 @@ import { Camera } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function StillControls({ aspect }: { aspect: Aspect }) {
-  const [mode, setMode] = useState<'px' | 'cm'>('px')
-  const [longEdge, setLongEdge] = useState(3000)
-  const [widthCm, setWidthCm] = useState(10)
-  const [dpi, setDpi] = useState(300)
+  // 機能3: プリセット記憶 - prefsから初期値を取得
+  const [mode, setModeState] = useState<'px' | 'cm'>(() => window.capture.getPrefs().stillMode ?? 'px')
+  const [longEdge, setLongEdgeState] = useState(() => window.capture.getPrefs().longEdge ?? 3000)
+  const [widthCm, setWidthCmState] = useState(() => window.capture.getPrefs().widthCm ?? 10)
+  const [dpi, setDpiState] = useState(() => window.capture.getPrefs().dpi ?? 300)
+
+  // 各state変更時にprefsへ保存するラッパー
+  const setMode = (m: 'px' | 'cm'): void => {
+    setModeState(m)
+    window.capture.setPrefs({ stillMode: m })
+  }
+  const setLongEdge = (v: number): void => {
+    setLongEdgeState(v)
+    window.capture.setPrefs({ longEdge: v })
+  }
+  const setWidthCm = (v: number): void => {
+    setWidthCmState(v)
+    window.capture.setPrefs({ widthCm: v })
+  }
+  const setDpi = (v: number): void => {
+    setDpiState(v)
+    window.capture.setPrefs({ dpi: v })
+  }
+
+  // 機能4: 出力解像度の計算
+  const rawTarget = mode === 'px'
+    ? targetFromLongEdge(aspect, longEdge)
+    : targetFromWidthCm(aspect, widthCm, dpi)
+  const { size: target } = capToGpuLimit(rawTarget)
+
+  // aspect変更時もprefsは不要（App.tsxで管理）
+  useEffect(() => {}, [aspect])
 
   const onCapture = async () => {
     const raw =
@@ -50,6 +78,8 @@ export function StillControls({ aspect }: { aspect: Aspect }) {
           </div>
         </div>
       )}
+      {/* 機能4: 出力解像度の数値表示 */}
+      <p className="text-xs text-muted-foreground">→ {target.width}×{target.height} px</p>
       <Button className="w-full" onClick={onCapture}>
         <Camera />
         Capture Still

@@ -7,12 +7,22 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
+import { ChevronLeft, ChevronRight, RotateCw } from 'lucide-react'
 
 function App() {
   const [url, setUrl] = useState('')
-  const [aspect, setAspect] = useState<Aspect>({ w: 1, h: 1 })
+  // 機能3: アスペクトをprefsから初期化
+  const [aspect, setAspectState] = useState<Aspect>(() => window.capture.getPrefs().aspect ?? { w: 1, h: 1 })
   const [customAspect, setCustomAspect] = useState('')
+  // 機能6: CSSセレクタ非表示（state変数名はhideSelectorsだが、setterはsetHideを使い命名衝突を回避）
+  const [hideSelectors, setHide] = useState(() => window.capture.getPrefs().hideSelectors ?? '')
   const { stageRef, getFrameRect } = useFrameRect(aspect)
+
+  // アスペクト変更時にprefsへ保存
+  const setAspect = (a: Aspect): void => {
+    setAspectState(a)
+    window.capture.setPrefs({ aspect: a })
+  }
 
   useEffect(() => {
     const offError = window.capture.onLoadError((info) => {
@@ -26,15 +36,42 @@ function App() {
         window.capture.loadUrl(last)
       }
     })
+
+    // 機能2: キーボードショートカット（Cmd/Ctrl + [ / ] / R）
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(e.metaKey || e.ctrlKey)) return
+      if (e.key === '[') { e.preventDefault(); window.capture.goBack() }
+      else if (e.key === ']') { e.preventDefault(); window.capture.goForward() }
+      else if (e.key === 'r') { e.preventDefault(); window.capture.reload() }
+    }
+    window.addEventListener('keydown', onKey)
+
     return () => {
       offError()
       offUrl()
+      window.removeEventListener('keydown', onKey)
     }
   }, [])
+
+  // 機能6: hideSelectors変更時にprefsへ保存し、MainプロセスにIPCで通知
+  useEffect(() => {
+    window.capture.setPrefs({ hideSelectors })
+    window.capture.setHideSelectors(hideSelectors)
+  }, [hideSelectors])
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+        {/* 機能2: ナビゲーションボタン */}
+        <Button variant="ghost" size="icon" onClick={() => window.capture.goBack()}>
+          <ChevronLeft />
+        </Button>
+        <Button variant="ghost" size="icon" onClick={() => window.capture.goForward()}>
+          <ChevronRight />
+        </Button>
+        <Button variant="ghost" size="icon" onClick={() => window.capture.reload()}>
+          <RotateCw />
+        </Button>
         <Input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
@@ -76,6 +113,16 @@ function App() {
           </section>
           <StillControls aspect={aspect} />
           <VideoControls aspect={aspect} getFrameRect={getFrameRect} />
+          {/* 機能6: Hide elements セクション */}
+          <section className="space-y-3 border-t border-border px-5 py-5">
+            <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Hide elements</h2>
+            <Input
+              value={hideSelectors}
+              onChange={(e) => setHide(e.target.value)}
+              placeholder="CSS selectors e.g. header, .menu"
+              className="h-8"
+            />
+          </section>
         </aside>
       </div>
       <Toaster theme="dark" />
