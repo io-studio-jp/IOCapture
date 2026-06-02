@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Aspect } from '../../../shared/aspect'
 import type { Rect } from '../../../shared/frameRect'
 import { videoPresetsFor } from '../../../shared/videoResolution'
-import { startRecording, startWindowRecording, type RecordHandle } from '../lib/recorder'
+import { startRecording, type RecordHandle } from '../lib/recorder'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Circle, Square, MousePointer2 } from 'lucide-react'
@@ -55,12 +55,7 @@ export function VideoControls({
     const preset = presets.find((p) => p.label === presetLabel)!
     const target = preset.size ?? { width: rect.width, height: rect.height }
     try {
-      if (includeCursor) {
-        const inset = await window.capture.getContentInset()
-        handleRef.current = await startWindowRecording(rect, target, inset)
-      } else {
-        handleRef.current = await startRecording(target)
-      }
+      handleRef.current = await startRecording(target, includeCursor)
       setRecording(true)
       if (!handleRef.current.hadAudio) {
         toast.warning('Recording without audio. Grant Screen Recording permission for system audio.')

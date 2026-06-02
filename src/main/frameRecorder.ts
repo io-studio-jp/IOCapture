@@ -3,9 +3,10 @@ import { writeFile, rm, mkdtemp } from 'fs/promises'
 import { copyFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { dialog } from 'electron'
+import { dialog, screen, BrowserWindow } from 'electron'
 import ffmpegStatic from 'ffmpeg-static'
 import { getArtworkView } from './artworkView'
+import { drawCursor } from './cursorSprite'
 import type { TargetSize } from '../shared/resolution'
 
 const ffmpegPath = ffmpegStatic ? ffmpegStatic.replace('app.asar', 'app.asar.unpacked') : null
@@ -19,20 +20,38 @@ let latest: Electron.NativeImage | null = null
 let tmpDir = ''
 let videoPath = ''
 let size: TargetSize = { width: 0, height: 0 }
+let withCursor = false
 
 export function isFrameRecording(): boolean {
   return ffmpeg !== null
 }
 
+// カーソル位置を作品ビュー内のフレーム座標(目標解像度)に変換する。範囲外ならnull。
+function cursorInFrame(): { x: number; y: number } | null {
+  const view = getArtworkView()
+  const win = BrowserWindow.getAllWindows()[0]
+  if (!view || !win) return null
+  const vb = view.getBounds()
+  if (vb.width <= 0 || vb.height <= 0) return null
+  const content = win.getContentBounds()
+  const p = screen.getCursorScreenPoint()
+  const fx = (p.x - (content.x + vb.x)) / vb.width
+  const fy = (p.y - (content.y + vb.y)) / vb.height
+  if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null
+  return { x: Math.round(fx * size.width), y: Math.round(fy * size.height) }
+}
+
 export async function startFrameCapture(
   target: TargetSize,
   fps: number,
+  includeCursor = false,
 ): Promise<{ ok: boolean; error?: string }> {
   const view = getArtworkView()
   if (!view) return { ok: false, error: 'view not ready' }
   if (!ffmpegPath) return { ok: false, error: 'ffmpeg binary not found' }
   if (ffmpeg) return { ok: false, error: 'already recording' }
 
+  withCursor = includeCursor
   // 偶数寸法（H.264が要求）に丸める。
   size = { width: Math.round(target.width / 2) * 2, height: Math.round(target.height / 2) * 2 }
 
@@ -63,10 +82,15 @@ export async function startFrameCapture(
   subscribed = true
 
   // 一定間隔で最新フレームを目標解像度に整えて書き込む（出力fpsを一定に保つ）。
+  const cursorScale = Math.max(2, Math.round(size.height / 540))
   writer = setInterval(() => {
     if (!latest || !ffmpeg) return
     const frame = latest.resize({ width: size.width, height: size.height, quality: 'good' })
     const buf = frame.toBitmap()
+    if (withCursor) {
+      const c = cursorInFrame()
+      if (c) drawCursor(buf, size.width, size.height, c.x, c.y, cursorScale)
+    }
     // バックプレッシャー時はドロップしてメモリ肥大を防ぐ。
     if (ffmpeg.stdin.writable) ffmpeg.stdin.write(buf)
   }, Math.round(1000 / fps))

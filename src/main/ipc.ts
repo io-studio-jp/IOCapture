@@ -34,7 +34,7 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
   ipcMain.handle(IPC.captureStill, (_e, args: CaptureStillArgs) => captureStill(args))
 
   ipcMain.handle(IPC.startFrameCapture, (_e, args: StartFrameCaptureArgs) =>
-    startFrameCapture(args.target, args.fps),
+    startFrameCapture(args.target, args.fps, args.includeCursor),
   )
   ipcMain.handle(IPC.stopFrameCapture, (_e, args: StopFrameCaptureArgs) =>
     stopFrameCapture(args.audio),
