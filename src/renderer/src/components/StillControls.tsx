@@ -22,7 +22,7 @@ export function StillControls({ aspect }: { aspect: Aspect }) {
     const { ok, size } = capToGpuLimit(raw)
     if (!ok) toast.warning(`Reduced to ${size.width}×${size.height}px due to GPU limit`)
     const res = await window.capture.captureStill({ target: size, transparent: true })
-    if (res.ok) toast.success(`Saved: ${res.savedPath}`)
+    if (res.ok) toast.success(`Saved ${res.width}×${res.height}px: ${res.savedPath}`)
     else if (res.error !== 'canceled') toast.error(`Failed: ${res.error}`)
   }
 

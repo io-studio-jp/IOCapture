@@ -30,7 +30,7 @@ export async function captureStill(args: CaptureStillArgs): Promise<CaptureStill
     })
     if (canceled || !filePath) return { ok: false, error: 'canceled' }
     await writeFile(filePath, png)
-    return { ok: true, savedPath: filePath }
+    return { ok: true, savedPath: filePath, width: args.target.width, height: args.target.height }
   } catch (e) {
     return { ok: false, error: String(e) }
   }

@@ -12,7 +12,9 @@ export const IPC = {
 export type LoadUrlArgs = { url: string }
 export type SetFrameRectArgs = { rect: Rect }
 export type CaptureStillArgs = { target: TargetSize; transparent: boolean }
-export type CaptureStillResult = { ok: true; savedPath: string } | { ok: false; error: string }
+export type CaptureStillResult =
+  | { ok: true; savedPath: string; width: number; height: number }
+  | { ok: false; error: string }
 export type ConvertToMp4Args = { webmPath: string }
 export type ConvertToMp4Result = { ok: true; mp4Path: string } | { ok: false; error: string }
 export type SaveBlobArgs = { data: ArrayBuffer; defaultName: string }
