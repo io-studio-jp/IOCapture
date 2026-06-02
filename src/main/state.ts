@@ -2,7 +2,8 @@ import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 
-type State = { lastUrl?: string }
+export type WindowBounds = { x: number; y: number; width: number; height: number }
+type State = { lastUrl?: string; windowBounds?: WindowBounds }
 
 function file(): string {
   return join(app.getPath('userData'), 'state.json')
@@ -31,5 +32,15 @@ export function getLastUrl(): string | null {
 export function setLastUrl(url: string): void {
   const s = read()
   s.lastUrl = url
+  write(s)
+}
+
+export function getWindowBounds(): WindowBounds | null {
+  return read().windowBounds ?? null
+}
+
+export function setWindowBounds(bounds: WindowBounds): void {
+  const s = read()
+  s.windowBounds = bounds
   write(s)
 }

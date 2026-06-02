@@ -5,12 +5,15 @@ import icon from '../../resources/icon.png?asset'
 import { ensureArtworkView } from './artworkView'
 import { registerIpc } from './ipc'
 import { registerDisplayMediaHandler } from './displayMedia'
+import { getWindowBounds, setWindowBounds } from './state'
 
 function createWindow(): void {
+  const saved = getWindowBounds()
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: saved?.width ?? 900,
+    height: saved?.height ?? 670,
+    ...(saved ? { x: saved.x, y: saved.y } : {}),
     show: false,
     autoHideMenuBar: true,
     title: 'record',
@@ -20,6 +23,12 @@ function createWindow(): void {
       sandbox: false
     }
   })
+
+  // ウィンドウサイズ・位置を記憶（移動/リサイズの確定時と終了時に保存）。
+  const saveBounds = (): void => setWindowBounds(mainWindow.getBounds())
+  mainWindow.on('resized', saveBounds)
+  mainWindow.on('moved', saveBounds)
+  mainWindow.on('close', saveBounds)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
