@@ -127,7 +127,7 @@ export function VideoControls({
           WebP
         </Button>
       </div>
-      {format === 'webp' && <p className="text-xs text-muted-foreground">アニメーションWebP（音声なし）</p>}
+      {format === 'webp' && <p className="text-xs text-muted-foreground">Animated WebP (no audio)</p>}
       <div className="grid grid-cols-3 gap-2">
         {fixed.map((p) => (
           <Button
