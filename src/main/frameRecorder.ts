@@ -141,9 +141,18 @@ export async function startFrameCapture(
   void captureLoop()
 
   // 一定レートで最新フレームを書き出す（出力fpsを一定に保ち、再生速度を正しくする）。
-  // capturePageが間に合わなければ同じフレームが重複し、速ければ間引かれる。
+  // バックプレッシャーを尊重: ffmpegが受け取れない間は書かずにスキップする。これをしないと
+  // エンコードが遅い設定(WebPロスレス等)で書き込みが溜まり続け、停止時にバックログを
+  // 処理し切れず「Finalizingのまま終わらない」状態になる。
+  let canWrite = true
+  ffmpeg.stdin.on('drain', () => {
+    canWrite = true
+  })
   writer = setInterval(() => {
-    if (ffmpeg && latestBuf && ffmpeg.stdin.writable) ffmpeg.stdin.write(latestBuf)
+    if (ffmpeg && latestBuf && canWrite && ffmpeg.stdin.writable) {
+      // write()がfalseを返したら次のdrainまで書き込みを止める。
+      canWrite = ffmpeg.stdin.write(latestBuf)
+    }
   }, Math.round(1000 / fps))
 
   return { ok: true }
