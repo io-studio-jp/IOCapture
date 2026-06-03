@@ -3,7 +3,8 @@ import { writeFile, rm, mkdtemp } from 'fs/promises'
 import { copyFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { dialog, screen, BrowserWindow } from 'electron'
+import { dialog, screen, BrowserWindow, nativeImage } from 'electron'
+import { once } from 'events'
 import ffmpegStatic from 'ffmpeg-static'
 import { getArtworkView } from './artworkView'
 import { drawCursor, ARROW_ROWS } from './cursorSprite'
@@ -14,13 +15,11 @@ const ffmpegPath = ffmpegStatic ? ffmpegStatic.replace('app.asar', 'app.asar.unp
 // 作品ビューのフレームを直接取得してffmpegへ供給する録画。OSカーソルは含まれず、
 // ウィンドウのタイトルバー等のズレも無い。出力解像度は各フレームをresizeして厳密に合わせる。
 let ffmpeg: ChildProcessWithoutNullStreams | null = null
-let writer: ReturnType<typeof setInterval> | null = null
 let tmpDir = ''
 let videoPath = ''
 let size: TargetSize = { width: 0, height: 0 }
 let withCursor = false
 let format: 'mp4' | 'webp' = 'mp4'
-let latestBuf: Buffer | null = null // capturePageループが更新する最新フレーム(BGRA)
 let stopped = false
 
 export function isFrameRecording(): boolean {
@@ -76,25 +75,27 @@ export async function startFrameCapture(
   tmpDir = await mkdtemp(join(tmpdir(), 'iocapture-'))
   videoPath = join(tmpDir, format === 'webp' ? 'video.webp' : 'video.mp4')
 
+  // 入力はPNGフレームを image2pipe で受け、到着した実時刻(wall-clock)でタイムスタンプを付ける。
+  // こうするとフレーム取得が遅れても「実時間どおりの再生速度」になり、固定fps前提による
+  // 速回し/カクつきが起きない。
   const inputArgs = [
     '-y',
-    '-f', 'rawvideo',
-    '-pixel_format', 'bgra',
-    '-video_size', `${size.width}x${size.height}`,
-    '-framerate', String(fps),
+    '-use_wallclock_as_timestamps', '1',
+    '-f', 'image2pipe',
     '-i', 'pipe:0',
     '-an',
   ]
   const encodeArgs =
     format === 'webp'
       ? // アニメーションWebP（音声なし・ループ）。ロスレスで滲み/バンディングを排除（容量増・重め）。
-        ['-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '1', '-compression_level', '4']
-      : // H.264 / mp4。リアルタイム入力のためpresetは速め、画質はCRFで担保。
-        ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '16', '-movflags', '+faststart']
+        ['-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '1', '-compression_level', '4', '-vsync', 'vfr']
+      : // H.264 / mp4。実時間の可変フレームレートを保持（再生速度が正しい）。
+        ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '16', '-movflags', '+faststart', '-vsync', 'vfr']
 
   ffmpeg = spawn(ffmpegPath, [...inputArgs, ...encodeArgs, videoPath])
-  ffmpeg.stdin.on('error', () => {}) // EPIPE等は無視（停止時に閉じるため）
-  ffmpeg.on('error', () => {})
+  const proc = ffmpeg
+  proc.stdin.on('error', () => {}) // EPIPE等は無視（停止時に閉じるため）
+  proc.on('error', () => {})
 
   const wc = view.webContents
 
@@ -102,69 +103,57 @@ export async function startFrameCapture(
   const MACOS_CURSOR_CSS = 18
   const viewCssH = view.getBounds().height || size.height
   const cursorScale = (MACOS_CURSOR_CSS * size.height) / viewCssH / ARROW_ROWS
+  const minIntervalMs = Math.round(1000 / fps)
 
-  // capturePage を可能な限り速く回して latestBuf を更新する（GPU合成コンテンツでも
-  // 毎回その時点の描画が取れる）。beginFrameSubscription はフレームを継続配信しない
-  // ことがあるため使わない。
-  latestBuf = null
+  // capturePage を回して各フレームをPNGで書き出す。バックプレッシャー時はdrainまで待つ
+  // （スキップではなく待機なので、タイムスタンプ=実時間が保たれ再生速度が正しい）。
   stopped = false
   const captureLoop = async (): Promise<void> => {
-    while (!stopped && ffmpeg) {
+    while (!stopped && ffmpeg === proc) {
+      const t0 = Date.now()
       try {
         const image = await wc.capturePage()
         const frame = image.resize({ width: size.width, height: size.height, quality: 'better' })
-        const raw = frame.toBitmap()
-        // toBitmapは行にパディング(stride)が入ることがある。ffmpegは幅×4でタイトに
-        // 読むので、必要なら詰め直して行ズレ(横スジ)を防ぐ。
-        const rowBytes = size.width * 4
-        const expected = rowBytes * size.height
-        let buf = raw
-        if (raw.length !== expected) {
-          const stride = Math.floor(raw.length / size.height)
-          const tight = Buffer.allocUnsafe(expected)
-          for (let y = 0; y < size.height; y++) {
-            raw.copy(tight, y * rowBytes, y * stride, y * stride + rowBytes)
-          }
-          buf = tight
-        }
+        let png: Buffer
         if (withCursor) {
+          // カーソル合成はビットマップを直接描く必要があるため、tightに詰めてから描画→PNG化。
+          const raw = frame.toBitmap()
+          const rowBytes = size.width * 4
+          const expected = rowBytes * size.height
+          let buf = raw
+          if (raw.length !== expected) {
+            const stride = Math.floor(raw.length / size.height)
+            const tight = Buffer.allocUnsafe(expected)
+            for (let y = 0; y < size.height; y++) {
+              raw.copy(tight, y * rowBytes, y * stride, y * stride + rowBytes)
+            }
+            buf = tight
+          }
           const c = cursorInFrame()
           if (c) drawCursor(buf, size.width, size.height, c.x, c.y, cursorScale)
+          png = nativeImage.createFromBitmap(buf, { width: size.width, height: size.height }).toPNG()
+        } else {
+          png = frame.toPNG()
         }
-        latestBuf = buf
+        if (stopped || ffmpeg !== proc || !proc.stdin.writable) break
+        if (!proc.stdin.write(png)) {
+          await once(proc.stdin, 'drain') // バックプレッシャー: 受け取れるまで待つ
+        }
       } catch {
-        // 破棄中など。少し待って継続。
         await new Promise((r) => setTimeout(r, 16))
       }
+      // fpsを上限に（速すぎる無駄取りを防ぐ）。capturePageが遅ければ実時間で進む。
+      const dt = Date.now() - t0
+      if (dt < minIntervalMs) await new Promise((r) => setTimeout(r, minIntervalMs - dt))
     }
   }
   void captureLoop()
-
-  // 一定レートで最新フレームを書き出す（出力fpsを一定に保ち、再生速度を正しくする）。
-  // バックプレッシャーを尊重: ffmpegが受け取れない間は書かずにスキップする。これをしないと
-  // エンコードが遅い設定(WebPロスレス等)で書き込みが溜まり続け、停止時にバックログを
-  // 処理し切れず「Finalizingのまま終わらない」状態になる。
-  let canWrite = true
-  ffmpeg.stdin.on('drain', () => {
-    canWrite = true
-  })
-  writer = setInterval(() => {
-    if (ffmpeg && latestBuf && canWrite && ffmpeg.stdin.writable) {
-      // write()がfalseを返したら次のdrainまで書き込みを止める。
-      canWrite = ffmpeg.stdin.write(latestBuf)
-    }
-  }, Math.round(1000 / fps))
 
   return { ok: true }
 }
 
 function stopCaptureLoop(): void {
   stopped = true
-  latestBuf = null
-  if (writer) {
-    clearInterval(writer)
-    writer = null
-  }
 }
 
 /** 録画停止 → 映像確定 → （あれば）音声と合成 → 保存ダイアログ。 */
