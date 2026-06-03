@@ -108,6 +108,8 @@ export async function startFrameCapture(
   const minIntervalMs = Math.round(1000 / fps)
   const rowBytes = size.width * 4
   const expected = rowBytes * size.height
+  // 出力がネイティブ解像度と同じなら縮小不要（resizeコストを省く）。
+  const needResize = size.width < Math.floor(nativeW) - 1
 
   // capturePage を回して各フレームの生BGRAを書き出す。バックプレッシャー時はdrainまで待つ
   // （スキップではなく待機なので、タイムスタンプ=実時間が保たれ再生速度が正しい）。
@@ -117,7 +119,9 @@ export async function startFrameCapture(
       const t0 = Date.now()
       try {
         const image = await wc.capturePage()
-        const frame = image.resize({ width: size.width, height: size.height, quality: 'better' })
+        const frame = needResize
+          ? image.resize({ width: size.width, height: size.height, quality: 'good' })
+          : image
         const raw = frame.toBitmap()
         // toBitmapは行にパディング(stride)が入ることがある。ffmpegは幅×4でタイトに読むので詰め直す。
         let buf = raw
