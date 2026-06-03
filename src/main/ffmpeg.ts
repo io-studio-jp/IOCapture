@@ -36,32 +36,36 @@ export async function convertToMp4(args: ConvertToMp4Args): Promise<ConvertToMp4
   }
 }
 
-/** カーソルあり録画（ウィンドウキャプチャ）のwebmをmp4へ変換し、保存ダイアログで保存する。 */
-export async function saveWebmAsMp4(data: ArrayBuffer): Promise<StopFrameCaptureResult> {
+/**
+ * Smooth方式（画面録画）のwebmを、指定フォーマットへオフライン変換して保存する。
+ * mp4=H.264+音声 / webp=アニメーションWebP(ロスレス・音声なし)。元が滑らかなので
+ * WebPも滑らかになる（変換はオフラインなのでフレーム落ちしない）。
+ */
+export async function saveWebmAs(
+  data: ArrayBuffer,
+  format: 'mp4' | 'webp',
+): Promise<StopFrameCaptureResult> {
   if (!ffmpegPath) return { ok: false, error: 'ffmpeg binary not found' }
   const dir = await mkdtemp(join(tmpdir(), 'iocapture-'))
   const webmPath = join(dir, 'in.webm')
-  const mp4Path = join(dir, 'out.mp4')
+  const ext = format === 'webp' ? 'webp' : 'mp4'
+  const outPath = join(dir, `out.${ext}`)
   try {
     await writeFile(webmPath, Buffer.from(data))
-    await run(ffmpegPath, [
-      '-y',
-      '-i', webmPath,
-      '-c:v', 'libx264',
-      '-pix_fmt', 'yuv420p',
-      '-c:a', 'aac',
-      '-movflags', '+faststart',
-      mp4Path,
-    ])
+    const args =
+      format === 'webp'
+        ? ['-y', '-i', webmPath, '-an', '-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '1', '-compression_level', '6', outPath]
+        : ['-y', '-i', webmPath, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', outPath]
+    await run(ffmpegPath, args)
     const { canceled, filePath } = await dialog.showSaveDialog({
-      defaultPath: `capture-${Date.now()}.mp4`,
-      filters: [{ name: 'MP4', extensions: ['mp4'] }],
+      defaultPath: `capture-${Date.now()}.${ext}`,
+      filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
     })
     if (canceled || !filePath) {
       await rm(dir, { recursive: true, force: true }).catch(() => {})
       return { ok: false, canceled: true }
     }
-    await copyFile(mp4Path, filePath)
+    await copyFile(outPath, filePath)
     await rm(dir, { recursive: true, force: true }).catch(() => {})
     return { ok: true, mp4Path: filePath }
   } catch (e) {

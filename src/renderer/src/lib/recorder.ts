@@ -15,6 +15,7 @@ export async function startWindowRecording(
   frameRect: Rect,
   target: TargetSize,
   inset: { x: number; y: number },
+  format: 'mp4' | 'webp' = 'mp4',
   fps = 60,
 ): Promise<RecordHandle> {
   const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -66,7 +67,7 @@ export async function startWindowRecording(
           stream.getTracks().forEach((t) => t.stop())
           outStream.getTracks().forEach((t) => t.stop())
           const buf = await new Blob(chunks, { type: 'video/webm' }).arrayBuffer()
-          const res = await window.capture.saveWebmAsMp4(buf)
+          const res = await window.capture.saveWebmAsMp4(buf, format)
           if (res.ok) resolve({ mp4Path: res.mp4Path })
           else resolve({ canceled: res.canceled, error: res.error })
         }

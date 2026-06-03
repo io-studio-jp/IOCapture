@@ -36,8 +36,7 @@ export function VideoControls({
     setEngineState(e)
     window.capture.setPrefs({ captureEngine: e })
   }
-  // screen方式はmp4のみ（MediaRecorderはアニメWebPを作れない）
-  const effectiveFormat: 'mp4' | 'webp' = engine === 'screen' ? 'mp4' : format
+  const effectiveFormat: 'mp4' | 'webp' = format
 
   const setTimer = (v: number): void => {
     setTimerState(v)
@@ -72,7 +71,7 @@ export function VideoControls({
     try {
       if (engine === 'screen') {
         const inset = await window.capture.getContentInset()
-        handleRef.current = await startWindowRecording(rect, target, inset)
+        handleRef.current = await startWindowRecording(rect, target, inset, format)
       } else {
         handleRef.current = await startRecording(target, includeCursor, format)
       }
@@ -146,20 +145,16 @@ export function VideoControls({
         {engine === 'screen' ? 'Screen capture · smooth · cursor included' : 'Frame capture · clean · any resolution'}
       </p>
 
-      {/* 出力フォーマット（Clean時のみ。Smoothはmp4固定） */}
-      {engine === 'frame' && (
-        <>
-          <div className="grid grid-cols-2 gap-2">
-            <Button size="sm" className="w-full" variant={format === 'mp4' ? 'default' : 'secondary'} onClick={() => setFormat('mp4')} disabled={recording || counting}>
-              MP4
-            </Button>
-            <Button size="sm" className="w-full" variant={format === 'webp' ? 'default' : 'secondary'} onClick={() => setFormat('webp')} disabled={recording || counting}>
-              WebP
-            </Button>
-          </div>
-          {format === 'webp' && <p className="text-xs text-muted-foreground">Animated WebP (no audio)</p>}
-        </>
-      )}
+      {/* 出力フォーマット（mp4 / WebP）。Smooth+WebPは滑らかなwebmを停止後にWebP変換。 */}
+      <div className="grid grid-cols-2 gap-2">
+        <Button size="sm" className="w-full" variant={format === 'mp4' ? 'default' : 'secondary'} onClick={() => setFormat('mp4')} disabled={recording || counting}>
+          MP4
+        </Button>
+        <Button size="sm" className="w-full" variant={format === 'webp' ? 'default' : 'secondary'} onClick={() => setFormat('webp')} disabled={recording || counting}>
+          WebP
+        </Button>
+      </div>
+      {format === 'webp' && <p className="text-xs text-muted-foreground">Animated WebP (no audio)</p>}
       <div className="grid grid-cols-3 gap-2">
         {fixed.map((p) => (
           <Button
