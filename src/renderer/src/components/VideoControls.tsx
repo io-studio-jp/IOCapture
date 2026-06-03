@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { Aspect } from '../../../shared/aspect'
 import type { Rect } from '../../../shared/frameRect'
 import { videoPresetsFor } from '../../../shared/videoResolution'
-import { startRecording, type RecordHandle } from '../lib/recorder'
+import { startRecording, startWindowRecording, type RecordHandle } from '../lib/recorder'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Circle, Square, MousePointer2 } from 'lucide-react'
+import { Circle, Square, MousePointer2, Zap, Crop } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function VideoControls({
@@ -24,12 +24,20 @@ export function VideoControls({
   const [includeCursor, setIncludeCursorState] = useState(() => window.capture.getPrefs().includeCursor ?? false)
   // 出力フォーマット（mp4=音声あり / webp=アニメーション画像・音声なし）
   const [format, setFormatState] = useState<'mp4' | 'webp'>(() => window.capture.getPrefs().videoFormat ?? 'mp4')
+  // 録画エンジン: frame=クリーン(capturePage) / screen=滑らか(画面録画)
+  const [engine, setEngineState] = useState<'frame' | 'screen'>(() => window.capture.getPrefs().captureEngine ?? 'frame')
   const handleRef = useRef<RecordHandle | null>(null)
 
   const setFormat = (f: 'mp4' | 'webp'): void => {
     setFormatState(f)
     window.capture.setPrefs({ videoFormat: f })
   }
+  const setEngine = (e: 'frame' | 'screen'): void => {
+    setEngineState(e)
+    window.capture.setPrefs({ captureEngine: e })
+  }
+  // screen方式はmp4のみ（MediaRecorderはアニメWebPを作れない）
+  const effectiveFormat: 'mp4' | 'webp' = engine === 'screen' ? 'mp4' : format
 
   const setTimer = (v: number): void => {
     setTimerState(v)
@@ -62,9 +70,14 @@ export function VideoControls({
     const preset = presets.find((p) => p.label === presetLabel)!
     const target = preset.size ?? { width: rect.width, height: rect.height }
     try {
-      handleRef.current = await startRecording(target, includeCursor, format)
+      if (engine === 'screen') {
+        const inset = await window.capture.getContentInset()
+        handleRef.current = await startWindowRecording(rect, target, inset)
+      } else {
+        handleRef.current = await startRecording(target, includeCursor, format)
+      }
       setRecording(true)
-      if (format === 'mp4' && !handleRef.current.hadAudio) {
+      if (effectiveFormat === 'mp4' && !handleRef.current.hadAudio) {
         toast.warning('Recording without audio. Grant Screen Recording permission for system audio.')
       }
     } catch (e) {
@@ -76,12 +89,12 @@ export function VideoControls({
     if (recording) {
       setRecording(false)
       // 書き出し・変換・保存に時間がかかるので、処理中であることを表示する。
-      const loadingId = toast.loading(`Finalizing ${format}…`)
+      const loadingId = toast.loading(`Finalizing ${effectiveFormat}…`)
       const res = await handleRef.current!.stop()
       toast.dismiss(loadingId)
       if ('mp4Path' in res) {
         const path = res.mp4Path
-        toast.success(`Saved ${format}`, {
+        toast.success(`Saved ${effectiveFormat}`, {
           description: path.split('/').pop(),
           action: { label: 'Reveal', onClick: () => window.capture.revealFile(path) },
         })
@@ -118,16 +131,35 @@ export function VideoControls({
   return (
     <section className="space-y-3 border-t border-border px-5 py-5">
       <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Video</h2>
-      {/* 出力フォーマット */}
+      {/* 録画エンジン: Smooth(画面録画) / Clean(フレーム取得) */}
       <div className="grid grid-cols-2 gap-2">
-        <Button size="sm" className="w-full" variant={format === 'mp4' ? 'default' : 'secondary'} onClick={() => setFormat('mp4')} disabled={recording || counting}>
-          MP4
+        <Button size="sm" className="w-full" variant={engine === 'screen' ? 'default' : 'secondary'} onClick={() => setEngine('screen')} disabled={recording || counting}>
+          <Zap />
+          Smooth
         </Button>
-        <Button size="sm" className="w-full" variant={format === 'webp' ? 'default' : 'secondary'} onClick={() => setFormat('webp')} disabled={recording || counting}>
-          WebP
+        <Button size="sm" className="w-full" variant={engine === 'frame' ? 'default' : 'secondary'} onClick={() => setEngine('frame')} disabled={recording || counting}>
+          <Crop />
+          Clean
         </Button>
       </div>
-      {format === 'webp' && <p className="text-xs text-muted-foreground">Animated WebP (no audio)</p>}
+      <p className="text-xs text-muted-foreground">
+        {engine === 'screen' ? 'Screen capture · smooth · cursor included' : 'Frame capture · clean · any resolution'}
+      </p>
+
+      {/* 出力フォーマット（Clean時のみ。Smoothはmp4固定） */}
+      {engine === 'frame' && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <Button size="sm" className="w-full" variant={format === 'mp4' ? 'default' : 'secondary'} onClick={() => setFormat('mp4')} disabled={recording || counting}>
+              MP4
+            </Button>
+            <Button size="sm" className="w-full" variant={format === 'webp' ? 'default' : 'secondary'} onClick={() => setFormat('webp')} disabled={recording || counting}>
+              WebP
+            </Button>
+          </div>
+          {format === 'webp' && <p className="text-xs text-muted-foreground">Animated WebP (no audio)</p>}
+        </>
+      )}
       <div className="grid grid-cols-3 gap-2">
         {fixed.map((p) => (
           <Button
@@ -153,17 +185,19 @@ export function VideoControls({
       )}
       {presetSizeLabel && <p className="text-xs text-muted-foreground">{presetSizeLabel}</p>}
 
-      {/* カーソルを録画に含めるか */}
-      <Button
-        size="sm"
-        className="w-full"
-        variant={includeCursor ? 'default' : 'secondary'}
-        onClick={toggleIncludeCursor}
-        disabled={recording || counting}
-      >
-        <MousePointer2 />
-        {includeCursor ? 'Cursor in video: on' : 'Cursor in video: off'}
-      </Button>
+      {/* カーソルを録画に含めるか（Clean時のみ。Smoothは常にカーソルあり） */}
+      {engine === 'frame' && (
+        <Button
+          size="sm"
+          className="w-full"
+          variant={includeCursor ? 'default' : 'secondary'}
+          onClick={toggleIncludeCursor}
+          disabled={recording || counting}
+        >
+          <MousePointer2 />
+          {includeCursor ? 'Cursor in video: on' : 'Cursor in video: off'}
+        </Button>
+      )}
 
       {/* カウントダウンタイマー */}
       <div className="space-y-1.5">

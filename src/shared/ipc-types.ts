@@ -69,6 +69,7 @@ export type Prefs = {
   stillTimer?: number
   videoTimer?: number
   includeCursor?: boolean
+  captureEngine?: 'frame' | 'screen'
   outputDir?: string
   intervalCount?: number
   intervalSec?: number
