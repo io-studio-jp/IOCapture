@@ -3,7 +3,7 @@ import { writeFile, rm, mkdtemp } from 'fs/promises'
 import { copyFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { dialog, screen, BrowserWindow, nativeImage } from 'electron'
+import { dialog, screen, BrowserWindow } from 'electron'
 import { once } from 'events'
 import ffmpegStatic from 'ffmpeg-static'
 import { getArtworkView } from './artworkView'
@@ -75,20 +75,22 @@ export async function startFrameCapture(
   tmpDir = await mkdtemp(join(tmpdir(), 'iocapture-'))
   videoPath = join(tmpDir, format === 'webp' ? 'video.webp' : 'video.mp4')
 
-  // 入力はPNGフレームを image2pipe で受け、到着した実時刻(wall-clock)でタイムスタンプを付ける。
-  // こうするとフレーム取得が遅れても「実時間どおりの再生速度」になり、固定fps前提による
-  // 速回し/カクつきが起きない。
+  // 入力は生BGRAフレーム。到着した実時刻(wall-clock)でタイムスタンプを付けるので、
+  // フレーム取得が遅れても「実時間どおりの再生速度」になる（固定fps前提の速回しが起きない）。
+  // PNGエンコードを挟まないぶん軽い。
   const inputArgs = [
     '-y',
+    '-f', 'rawvideo',
+    '-pixel_format', 'bgra',
+    '-video_size', `${size.width}x${size.height}`,
     '-use_wallclock_as_timestamps', '1',
-    '-f', 'image2pipe',
     '-i', 'pipe:0',
     '-an',
   ]
   const encodeArgs =
     format === 'webp'
-      ? // アニメーションWebP（音声なし・ループ）。ロスレスで滲み/バンディングを排除（容量増・重め）。
-        ['-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '1', '-compression_level', '4', '-vsync', 'vfr']
+      ? // アニメーションWebP（音声なし・ループ）。ロスレス＋速度寄りの圧縮レベルでフレーム落ちを抑える。
+        ['-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '1', '-compression_level', '2', '-vsync', 'vfr']
       : // H.264 / mp4。実時間の可変フレームレートを保持（再生速度が正しい）。
         ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '16', '-movflags', '+faststart', '-vsync', 'vfr']
 
@@ -104,8 +106,10 @@ export async function startFrameCapture(
   const viewCssH = view.getBounds().height || size.height
   const cursorScale = (MACOS_CURSOR_CSS * size.height) / viewCssH / ARROW_ROWS
   const minIntervalMs = Math.round(1000 / fps)
+  const rowBytes = size.width * 4
+  const expected = rowBytes * size.height
 
-  // capturePage を回して各フレームをPNGで書き出す。バックプレッシャー時はdrainまで待つ
+  // capturePage を回して各フレームの生BGRAを書き出す。バックプレッシャー時はdrainまで待つ
   // （スキップではなく待機なので、タイムスタンプ=実時間が保たれ再生速度が正しい）。
   stopped = false
   const captureLoop = async (): Promise<void> => {
@@ -114,29 +118,23 @@ export async function startFrameCapture(
       try {
         const image = await wc.capturePage()
         const frame = image.resize({ width: size.width, height: size.height, quality: 'better' })
-        let png: Buffer
-        if (withCursor) {
-          // カーソル合成はビットマップを直接描く必要があるため、tightに詰めてから描画→PNG化。
-          const raw = frame.toBitmap()
-          const rowBytes = size.width * 4
-          const expected = rowBytes * size.height
-          let buf = raw
-          if (raw.length !== expected) {
-            const stride = Math.floor(raw.length / size.height)
-            const tight = Buffer.allocUnsafe(expected)
-            for (let y = 0; y < size.height; y++) {
-              raw.copy(tight, y * rowBytes, y * stride, y * stride + rowBytes)
-            }
-            buf = tight
+        const raw = frame.toBitmap()
+        // toBitmapは行にパディング(stride)が入ることがある。ffmpegは幅×4でタイトに読むので詰め直す。
+        let buf = raw
+        if (raw.length !== expected) {
+          const stride = Math.floor(raw.length / size.height)
+          const tight = Buffer.allocUnsafe(expected)
+          for (let y = 0; y < size.height; y++) {
+            raw.copy(tight, y * rowBytes, y * stride, y * stride + rowBytes)
           }
+          buf = tight
+        }
+        if (withCursor) {
           const c = cursorInFrame()
           if (c) drawCursor(buf, size.width, size.height, c.x, c.y, cursorScale)
-          png = nativeImage.createFromBitmap(buf, { width: size.width, height: size.height }).toPNG()
-        } else {
-          png = frame.toPNG()
         }
         if (stopped || ffmpeg !== proc || !proc.stdin.writable) break
-        if (!proc.stdin.write(png)) {
+        if (!proc.stdin.write(buf)) {
           await once(proc.stdin, 'drain') // バックプレッシャー: 受け取れるまで待つ
         }
       } catch {
