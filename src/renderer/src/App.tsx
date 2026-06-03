@@ -43,7 +43,7 @@ function App() {
     window.capture.checkUpdate().then((u) => {
       if (u.update && u.url) {
         const url = u.url
-        toast(`新しいバージョン ${u.version} があります`, {
+        toast(`New version v${u.version} available`, {
           duration: 12000,
           action: { label: 'Download', onClick: () => window.capture.openExternal(url) },
         })
