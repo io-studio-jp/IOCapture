@@ -76,19 +76,17 @@ export function VideoControls({
     if (recording) {
       setRecording(false)
       // 書き出し・変換・保存に時間がかかるので、処理中であることを表示する。
-      toast.loading(`Finalizing ${format}…`, { id: 'video-save' })
+      const loadingId = toast.loading(`Finalizing ${format}…`)
       const res = await handleRef.current!.stop()
+      toast.dismiss(loadingId)
       if ('mp4Path' in res) {
         const path = res.mp4Path
         toast.success(`Saved ${format}`, {
-          id: 'video-save',
           description: path.split('/').pop(),
           action: { label: 'Reveal', onClick: () => window.capture.revealFile(path) },
         })
-      } else if (res.canceled) {
-        toast.dismiss('video-save')
-      } else {
-        toast.error(`Save failed: ${res.error}`, { id: 'video-save' })
+      } else if (!res.canceled) {
+        toast.error(`Save failed: ${res.error}`)
       }
       return
     }
