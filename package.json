@@ -1,6 +1,6 @@
 {
   "name": "iocapture",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Capture screenshots and video of web pages and interactive content, with controlled aspect ratio and resolution.",
   "main": "./out/main/index.js",
   "author": "Chiaki Uehira",
