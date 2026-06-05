@@ -16,11 +16,12 @@ export async function startWindowRecording(
   target: TargetSize,
   inset: { x: number; y: number },
   format: 'mp4' | 'webp' = 'mp4',
+  recordAudio = true,
   fps = 60,
 ): Promise<RecordHandle> {
   const stream = await navigator.mediaDevices.getDisplayMedia({
     video: { frameRate: { ideal: fps } } as MediaTrackConstraints,
-    audio: true,
+    audio: recordAudio,
   })
   const hadAudio = stream.getAudioTracks().length > 0
 
@@ -85,6 +86,7 @@ export async function startRecording(
   target: TargetSize,
   includeCursor = false,
   format: 'mp4' | 'webp' = 'mp4',
+  recordAudio = true,
   fps = 60,
 ): Promise<RecordHandle> {
   const started = await window.capture.startFrameCapture(target, fps, includeCursor, format)
@@ -97,7 +99,7 @@ export async function startRecording(
   const chunks: Blob[] = []
   let hadAudio = false
   try {
-    if (format === 'webp') throw new Error('skip audio')
+    if (format === 'webp' || !recordAudio) throw new Error('skip audio')
     audioStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
     audioStream.getVideoTracks().forEach((t) => t.stop())
     const audioTracks = audioStream.getAudioTracks()
