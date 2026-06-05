@@ -19,6 +19,7 @@ import {
   audioSourceOptions,
   resolveAudioSource,
 } from '../../../shared/audioSource'
+import { useAudioLevel } from '../lib/useAudioLevel'
 import { toast } from 'sonner'
 
 export function VideoControls({
@@ -44,6 +45,8 @@ export function VideoControls({
   const [audioDevices, setAudioDevices] = useState<{ deviceId: string; label: string }[]>([])
   // 出力フォーマット（mp4=音声あり / webp=アニメーション画像・音声なし）
   const [format, setFormatState] = useState<'mp4' | 'webp'>(() => window.capture.getPrefs().videoFormat ?? 'mp4')
+  // 選択中ソースの入力レベル(0〜1)。off/WebP/取得失敗時はnull
+  const audioLevel = useAudioLevel(audioSource, format === 'mp4')
   // 録画エンジン: frame=クリーン(capturePage) / screen=滑らか(画面録画)
   const [engine, setEngineState] = useState<'frame' | 'screen'>(() => window.capture.getPrefs().captureEngine ?? 'frame')
   const handleRef = useRef<RecordHandle | null>(null)
@@ -225,6 +228,16 @@ export function VideoControls({
               )}
             </SelectContent>
           </Select>
+          {audioLevel !== null && (
+            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+              {/* グラデーションを全幅に敷き、レベル分だけ右からのクリップで見せる。
+                  RMSは音楽でも0.1〜0.3程度なので3倍ブーストして視認性を上げる */}
+              <div
+                className="absolute inset-0 bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 transition-[clip-path] duration-100"
+                style={{ clipPath: `inset(0 ${100 - Math.min(1, audioLevel * 3) * 100}% 0 0)` }}
+              />
+            </div>
+          )}
         </div>
       )}
       <div className="grid grid-cols-3 gap-2">
