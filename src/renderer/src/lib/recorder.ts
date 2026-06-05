@@ -1,5 +1,18 @@
 import type { TargetSize } from '../../../shared/resolution'
 import type { Rect } from '../../../shared/frameRect'
+import { AUDIO_OFF, AUDIO_SYSTEM, type AudioSource } from '../../../shared/audioSource'
+
+/** 指定deviceIdの音声入力トラックを取得する。失敗(未接続・権限拒否)はnull。 */
+async function getDeviceAudioTrack(deviceId: string): Promise<MediaStreamTrack | null> {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { deviceId: { exact: deviceId } },
+    })
+    return stream.getAudioTracks()[0] ?? null
+  } catch {
+    return null
+  }
+}
 
 export type RecordResult = { mp4Path: string } | { canceled?: boolean; error?: string }
 export type RecordHandle = {
@@ -16,14 +29,19 @@ export async function startWindowRecording(
   target: TargetSize,
   inset: { x: number; y: number },
   format: 'mp4' | 'webp' = 'mp4',
-  recordAudio = true,
+  audioSource: AudioSource = AUDIO_SYSTEM,
   fps = 60,
 ): Promise<RecordHandle> {
+  // 音声: system=画面録画のループバック / deviceId=入力デバイス / off=なし
   const stream = await navigator.mediaDevices.getDisplayMedia({
     video: { frameRate: { ideal: fps } } as MediaTrackConstraints,
-    audio: recordAudio,
+    audio: audioSource === AUDIO_SYSTEM,
   })
-  const hadAudio = stream.getAudioTracks().length > 0
+  let audioTrack: MediaStreamTrack | null = stream.getAudioTracks()[0] ?? null
+  if (audioSource !== AUDIO_SYSTEM && audioSource !== AUDIO_OFF) {
+    audioTrack = await getDeviceAudioTrack(audioSource)
+  }
+  const hadAudio = audioTrack !== null
 
   const videoEl = document.createElement('video')
   videoEl.srcObject = new MediaStream(stream.getVideoTracks())
@@ -48,7 +66,7 @@ export async function startWindowRecording(
   draw()
 
   const outStream = canvas.captureStream(fps)
-  if (hadAudio) outStream.addTrack(stream.getAudioTracks()[0])
+  if (audioTrack) outStream.addTrack(audioTrack)
   const pixels = canvas.width * canvas.height
   const bitrate = Math.min(40_000_000, Math.max(8_000_000, Math.round(pixels * fps * 0.12)))
   const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
@@ -66,6 +84,7 @@ export async function startWindowRecording(
         rec.onstop = async () => {
           cancelAnimationFrame(raf)
           stream.getTracks().forEach((t) => t.stop())
+          audioTrack?.stop()
           outStream.getTracks().forEach((t) => t.stop())
           const buf = await new Blob(chunks, { type: 'video/webm' }).arrayBuffer()
           const res = await window.capture.saveWebmAsMp4(buf, format)
@@ -86,26 +105,32 @@ export async function startRecording(
   target: TargetSize,
   includeCursor = false,
   format: 'mp4' | 'webp' = 'mp4',
-  recordAudio = true,
+  audioSource: AudioSource = AUDIO_SYSTEM,
   fps = 60,
 ): Promise<RecordHandle> {
   const started = await window.capture.startFrameCapture(target, fps, includeCursor, format)
   if (!started.ok) throw new Error(started.error || 'failed to start frame capture')
 
-  // 音声のみ録音（システム音声ループバック）。映像トラックは使わないので停止する。
-  // WebPは画像形式で音声を持てないため、またrecordAudio=falseのときも録音しない。
+  // 音声のみ録音(system=ループバック / deviceId=入力デバイス)。
+  // WebPは画像形式で音声を持てないため、またaudioSource=offのときも録音しない。
   let audioRec: MediaRecorder | null = null
   let audioStream: MediaStream | null = null
   const chunks: Blob[] = []
   let hadAudio = false
   try {
-    if (format === 'webp' || !recordAudio) throw new Error('skip audio')
-    audioStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-    audioStream.getVideoTracks().forEach((t) => t.stop())
-    const audioTracks = audioStream.getAudioTracks()
-    if (audioTracks.length) {
+    if (format === 'webp' || audioSource === AUDIO_OFF) throw new Error('skip audio')
+    let audioTrack: MediaStreamTrack | null = null
+    if (audioSource === AUDIO_SYSTEM) {
+      audioStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+      audioStream.getVideoTracks().forEach((t) => t.stop())
+      audioTrack = audioStream.getAudioTracks()[0] ?? null
+    } else {
+      audioTrack = await getDeviceAudioTrack(audioSource)
+      if (audioTrack) audioStream = new MediaStream([audioTrack])
+    }
+    if (audioTrack) {
       hadAudio = true
-      audioRec = new MediaRecorder(new MediaStream([audioTracks[0]]), {
+      audioRec = new MediaRecorder(new MediaStream([audioTrack]), {
         mimeType: 'audio/webm;codecs=opus',
       })
       audioRec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
