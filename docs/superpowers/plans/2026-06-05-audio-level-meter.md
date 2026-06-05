@@ -18,7 +18,7 @@
 - Create: `src/shared/audioLevel.ts`
 - Test: `src/shared/audioLevel.test.ts`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `src/shared/audioLevel.test.ts` を新規作成(スタイルは `src/shared/audioSource.test.ts` と同じ):
 
@@ -45,12 +45,12 @@ describe('rmsLevel', () => {
 })
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `npx vitest run src/shared/audioLevel.test.ts`
 Expected: FAIL(`./audioLevel` が存在しない)
 
-- [ ] **Step 3: 実装を書く**
+- [x] **Step 3: 実装を書く**
 
 `src/shared/audioLevel.ts` を新規作成:
 
@@ -70,17 +70,17 @@ export function rmsLevel(data: Uint8Array): number {
 }
 ```
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `npx vitest run src/shared/audioLevel.test.ts`
 Expected: PASS(全5テスト)
 
-- [ ] **Step 5: 全テストとtypecheckを実行**
+- [x] **Step 5: 全テストとtypecheckを実行**
 
 Run: `npm test && npm run typecheck`
 Expected: 既存テスト含め全てPASS、typecheckエラーなし
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/shared/audioLevel.ts src/shared/audioLevel.test.ts
@@ -94,7 +94,7 @@ git commit -m "feat: time domainデータからRMSレベルを計算する純関
 
 フックはブラウザAPI(getUserMedia/getDisplayMedia/AudioContext/rAF)に密結合なのでユニットテストは書かず、Task 4の手動確認で検証する。純ロジック(RMS)はTask 1でテスト済み。
 
-- [ ] **Step 1: フックを実装する**
+- [x] **Step 1: フックを実装する**
 
 `src/renderer/src/lib/useAudioLevel.ts` を新規作成:
 
@@ -182,12 +182,12 @@ export function useAudioLevel(audioSource: AudioSource, enabled: boolean): numbe
 }
 ```
 
-- [ ] **Step 2: typecheckとlintで確認**
+- [x] **Step 2: typecheckとlintで確認**
 
 Run: `npm run typecheck && npx eslint src/renderer/src/lib/useAudioLevel.ts`
 Expected: typecheckエラーなし、新規ファイルにlintエラーなし(リポジトリ全体の `npm run lint` には既存ファイル由来のエラーがあるため、新規ファイル単体で確認する)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/renderer/src/lib/useAudioLevel.ts
@@ -199,7 +199,7 @@ git commit -m "feat: 音声ソースの入力レベルを監視するuseAudioLev
 **Files:**
 - Modify: `src/renderer/src/components/VideoControls.tsx`
 
-- [ ] **Step 1: importを追加**
+- [x] **Step 1: importを追加**
 
 import群(`resolveAudioSource` のimportの後)に追加:
 
@@ -207,7 +207,7 @@ import群(`resolveAudioSource` のimportの後)に追加:
 import { useAudioLevel } from '../lib/useAudioLevel'
 ```
 
-- [ ] **Step 2: フックを呼ぶ**
+- [x] **Step 2: フックを呼ぶ**
 
 `audioDevices` のstate定義の直後に追加:
 
@@ -216,7 +216,7 @@ import { useAudioLevel } from '../lib/useAudioLevel'
   const audioLevel = useAudioLevel(audioSource, format === 'mp4')
 ```
 
-- [ ] **Step 3: JSXにメーターを追加**
+- [x] **Step 3: JSXにメーターを追加**
 
 Audio Selectブロック内、`</Select>` の直後(`</div>` の前)に追加:
 
@@ -268,12 +268,12 @@ Audio Selectブロック内、`</Select>` の直後(`</div>` の前)に追加:
       )}
 ```
 
-- [ ] **Step 4: typecheck・テスト・lintを実行**
+- [x] **Step 4: typecheck・テスト・lintを実行**
 
 Run: `npm run typecheck && npm test && npx eslint src/renderer/src/components/VideoControls.tsx`
 Expected: typecheck・全テストPASS。lintは既存3エラー(24:8 / 102:23 / 139:29 付近の Missing return type 等)のみで、今回の追加による新規エラーがないこと
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/src/components/VideoControls.tsx
