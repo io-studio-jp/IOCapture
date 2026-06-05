@@ -5,7 +5,7 @@ import { videoPresetsFor } from '../../../shared/videoResolution'
 import { startRecording, startWindowRecording, type RecordHandle } from '../lib/recorder'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Circle, Square, MousePointer2, Zap, Crop } from 'lucide-react'
+import { Circle, Square, MousePointer2, Zap, Crop, Volume2, VolumeX } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function VideoControls({
@@ -22,6 +22,8 @@ export function VideoControls({
   const [timer, setTimerState] = useState(() => window.capture.getPrefs().videoTimer ?? 0)
   // カーソルを録画に含めるか（フレームに矢印を合成）
   const [includeCursor, setIncludeCursorState] = useState(() => window.capture.getPrefs().includeCursor ?? false)
+  // システム音声を録音するか(MP4のみ。WebPは元々音声なし)
+  const [recordAudio, setRecordAudioState] = useState(() => window.capture.getPrefs().recordAudio ?? true)
   // 出力フォーマット（mp4=音声あり / webp=アニメーション画像・音声なし）
   const [format, setFormatState] = useState<'mp4' | 'webp'>(() => window.capture.getPrefs().videoFormat ?? 'mp4')
   // 録画エンジン: frame=クリーン(capturePage) / screen=滑らか(画面録画)
@@ -49,6 +51,13 @@ export function VideoControls({
       return next
     })
 
+  const toggleRecordAudio = (): void =>
+    setRecordAudioState((v) => {
+      const next = !v
+      window.capture.setPrefs({ recordAudio: next })
+      return next
+    })
+
   // 録画経過時間
   const [elapsed, setElapsed] = useState(0)
   useEffect(() => {
@@ -71,12 +80,12 @@ export function VideoControls({
     try {
       if (engine === 'screen') {
         const inset = await window.capture.getContentInset()
-        handleRef.current = await startWindowRecording(rect, target, inset, format)
+        handleRef.current = await startWindowRecording(rect, target, inset, format, recordAudio)
       } else {
-        handleRef.current = await startRecording(target, includeCursor, format)
+        handleRef.current = await startRecording(target, includeCursor, format, recordAudio)
       }
       setRecording(true)
-      if (effectiveFormat === 'mp4' && !handleRef.current.hadAudio) {
+      if (effectiveFormat === 'mp4' && recordAudio && !handleRef.current.hadAudio) {
         toast.warning('Recording without audio. Grant Screen Recording permission for system audio.')
       }
     } catch (e) {
@@ -155,6 +164,19 @@ export function VideoControls({
         </Button>
       </div>
       {format === 'webp' && <p className="text-xs text-muted-foreground">Animated WebP (no audio)</p>}
+      {/* システム音声を録音するか(MP4のみ。WebPは音声を持てない) */}
+      {format === 'mp4' && (
+        <Button
+          size="sm"
+          className="w-full"
+          variant={recordAudio ? 'default' : 'secondary'}
+          onClick={toggleRecordAudio}
+          disabled={recording || counting}
+        >
+          {recordAudio ? <Volume2 /> : <VolumeX />}
+          {recordAudio ? 'System audio: on' : 'System audio: off'}
+        </Button>
+      )}
       <div className="grid grid-cols-3 gap-2">
         {fixed.map((p) => (
           <Button
