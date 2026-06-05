@@ -74,6 +74,10 @@ export type Prefs = {
   intervalCount?: number
   intervalSec?: number
   videoFormat?: VideoFormat
-  // VIDEO録画でシステム音声を録音するか(未設定はtrue扱い)
+  // VIDEO録画でシステム音声を録音するか(旧設定。audioSourceへ移行済み、読み取りのみ)
   recordAudio?: boolean
+  // VIDEO録画の音声ソース('off' | 'system' | 音声入力デバイスのdeviceId)
+  audioSource?: string
+  // audioSourceがデバイスのときの表示名(未接続時のSelect表示に使う)
+  audioSourceLabel?: string
 }
