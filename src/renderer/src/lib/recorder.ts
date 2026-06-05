@@ -93,7 +93,7 @@ export async function startRecording(
   if (!started.ok) throw new Error(started.error || 'failed to start frame capture')
 
   // 音声のみ録音（システム音声ループバック）。映像トラックは使わないので停止する。
-  // WebPは画像形式で音声を持てないため録音しない。
+  // WebPは画像形式で音声を持てないため、またrecordAudio=falseのときも録音しない。
   let audioRec: MediaRecorder | null = null
   let audioStream: MediaStream | null = null
   const chunks: Blob[] = []
