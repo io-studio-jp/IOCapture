@@ -5,7 +5,20 @@ import { videoPresetsFor } from '../../../shared/videoResolution'
 import { startRecording, startWindowRecording, type RecordHandle } from '../lib/recorder'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Circle, Square, MousePointer2, Zap, Crop, Volume2, VolumeX } from 'lucide-react'
+import { Circle, Square, MousePointer2, Zap, Crop } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  AUDIO_OFF,
+  AUDIO_SYSTEM,
+  audioSourceOptions,
+  resolveAudioSource,
+} from '../../../shared/audioSource'
 import { toast } from 'sonner'
 
 export function VideoControls({
@@ -22,8 +35,13 @@ export function VideoControls({
   const [timer, setTimerState] = useState(() => window.capture.getPrefs().videoTimer ?? 0)
   // カーソルを録画に含めるか（フレームに矢印を合成）
   const [includeCursor, setIncludeCursorState] = useState(() => window.capture.getPrefs().includeCursor ?? false)
-  // システム音声を録音するか(MP4のみ。WebPは元々音声なし)
-  const [recordAudio, setRecordAudioState] = useState(() => window.capture.getPrefs().recordAudio ?? true)
+  // 音声ソース('off' | 'system' | deviceId)。旧recordAudio設定からの移行はresolveAudioSourceが行う
+  const [audioSource, setAudioSourceState] = useState(() => resolveAudioSource(window.capture.getPrefs()))
+  const [audioSourceLabel, setAudioSourceLabel] = useState(
+    () => window.capture.getPrefs().audioSourceLabel,
+  )
+  // 利用可能な音声入力デバイス一覧(devicechangeで更新)
+  const [audioDevices, setAudioDevices] = useState<{ deviceId: string; label: string }[]>([])
   // 出力フォーマット（mp4=音声あり / webp=アニメーション画像・音声なし）
   const [format, setFormatState] = useState<'mp4' | 'webp'>(() => window.capture.getPrefs().videoFormat ?? 'mp4')
   // 録画エンジン: frame=クリーン(capturePage) / screen=滑らか(画面録画)
@@ -51,12 +69,32 @@ export function VideoControls({
       return next
     })
 
-  const toggleRecordAudio = (): void =>
-    setRecordAudioState((v) => {
-      const next = !v
-      window.capture.setPrefs({ recordAudio: next })
-      return next
-    })
+  const setAudioSource = (value: string): void => {
+    const device = audioDevices.find((d) => d.deviceId === value)
+    const label = device ? device.label || 'Microphone' : undefined
+    setAudioSourceState(value)
+    setAudioSourceLabel(label)
+    window.capture.setPrefs({ audioSource: value, audioSourceLabel: label })
+  }
+
+  // 音声入力デバイスを列挙し、抜き差し(devicechange)で更新する
+  useEffect(() => {
+    const refresh = (): void => {
+      navigator.mediaDevices
+        .enumerateDevices()
+        .then((all) =>
+          setAudioDevices(
+            all
+              .filter((d) => d.kind === 'audioinput')
+              .map((d) => ({ deviceId: d.deviceId, label: d.label })),
+          ),
+        )
+        .catch(() => setAudioDevices([]))
+    }
+    refresh()
+    navigator.mediaDevices.addEventListener('devicechange', refresh)
+    return () => navigator.mediaDevices.removeEventListener('devicechange', refresh)
+  }, [])
 
   // 録画経過時間
   const [elapsed, setElapsed] = useState(0)
@@ -80,13 +118,18 @@ export function VideoControls({
     try {
       if (engine === 'screen') {
         const inset = await window.capture.getContentInset()
-        handleRef.current = await startWindowRecording(rect, target, inset, format, recordAudio)
+        handleRef.current = await startWindowRecording(rect, target, inset, format, audioSource)
       } else {
-        handleRef.current = await startRecording(target, includeCursor, format, recordAudio)
+        handleRef.current = await startRecording(target, includeCursor, format, audioSource)
       }
       setRecording(true)
-      if (effectiveFormat === 'mp4' && recordAudio && !handleRef.current.hadAudio) {
-        toast.warning('Recording without audio. Grant Screen Recording permission for system audio.')
+      // 音声を録るはずだったのに取れなかったときだけ警告(原因はソースにより異なる)
+      if (effectiveFormat === 'mp4' && audioSource !== AUDIO_OFF && !handleRef.current.hadAudio) {
+        toast.warning(
+          audioSource === AUDIO_SYSTEM
+            ? 'Recording without audio. Grant Screen Recording permission for system audio.'
+            : 'Selected audio device unavailable. Recording without audio.',
+        )
       }
     } catch (e) {
       toast.error(`Could not start recording: ${String(e)}`)
@@ -164,18 +207,25 @@ export function VideoControls({
         </Button>
       </div>
       {format === 'webp' && <p className="text-xs text-muted-foreground">Animated WebP (no audio)</p>}
-      {/* システム音声を録音するか(MP4のみ。WebPは音声を持てない) */}
+      {/* 音声ソース(MP4のみ。WebPは音声を持てない): off / system / 入力デバイス */}
       {format === 'mp4' && (
-        <Button
-          size="sm"
-          className="w-full"
-          variant={recordAudio ? 'default' : 'secondary'}
-          onClick={toggleRecordAudio}
-          disabled={recording || counting}
-        >
-          {recordAudio ? <Volume2 /> : <VolumeX />}
-          {recordAudio ? 'System audio: on' : 'System audio: off'}
-        </Button>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Audio</Label>
+          <Select value={audioSource} onValueChange={setAudioSource} disabled={recording || counting}>
+            <SelectTrigger size="sm" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {audioSourceOptions(audioDevices, { source: audioSource, label: audioSourceLabel }).map(
+                (o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ),
+              )}
+            </SelectContent>
+          </Select>
+        </div>
       )}
       <div className="grid grid-cols-3 gap-2">
         {fixed.map((p) => (
