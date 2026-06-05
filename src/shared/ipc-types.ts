@@ -74,4 +74,6 @@ export type Prefs = {
   intervalCount?: number
   intervalSec?: number
   videoFormat?: VideoFormat
+  // VIDEO録画でシステム音声を録音するか(未設定はtrue扱い)
+  recordAudio?: boolean
 }
