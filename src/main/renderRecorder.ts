@@ -52,13 +52,22 @@ function waitForLoad(wc: Electron.WebContents, timeoutMs: number): Promise<void>
       clearTimeout(timer)
       if (!wc.isDestroyed()) {
         wc.removeListener('did-finish-load', done)
-        wc.removeListener('did-fail-load', done)
+        wc.removeListener('did-fail-load', onFail)
       }
       resolve()
     }
+    const onFail = (
+      _e: unknown,
+      _code: number,
+      _desc: string,
+      _url: string,
+      isMainFrame: boolean
+    ): void => {
+      if (isMainFrame) done()
+    }
     const timer = setTimeout(done, timeoutMs)
     wc.once('did-finish-load', done)
-    wc.once('did-fail-load', done)
+    wc.on('did-fail-load', onFail)
   })
 }
 
@@ -72,8 +81,14 @@ async function reloadIntoVirtualMode(): Promise<void> {
   // 読み込み失敗は即座に検知する(15秒のサイレントタイムアウトを避ける)。
   // ERR_ABORTED(-3)は再ナビゲーション等で発生する無害なものなので無視する。
   let loadError: string | null = null
-  const onFailLoad = (_e: unknown, code: number, desc: string): void => {
-    if (code !== -3) loadError = `artwork load failed: ${desc} (${code})`
+  const onFailLoad = (
+    _e: unknown,
+    code: number,
+    desc: string,
+    _url: string,
+    isMainFrame: boolean
+  ): void => {
+    if (isMainFrame && code !== -3) loadError = `artwork load failed: ${desc} (${code})`
   }
   wc.on('did-fail-load', onFailLoad)
   try {

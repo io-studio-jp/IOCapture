@@ -104,66 +104,16 @@ export async function startWindowRecording(
 }
 
 /**
- * 動画録画（唯一の方式）。映像はMainが作品ビューのフレームを直接取得して生成する
- * （枠ピッタリ・解像度自由）。includeCursorがtrueのときはMainが各フレームに矢印カーソルを
- * 合成する。音声のみrendererでループバック録音し、停止時にMainで合成する。
+ * Renderモード: 仮想時計オフラインレンダリング(Main主導)。任意解像度・固定fps保証・音声なし。
+ * 録画中はMainがフリーズ表示と進捗イベントを出す。完了/キャンセルまで解決しない。
  */
-export async function startRecording(
+export async function startRenderRecording(
   target: TargetSize,
-  includeCursor = false,
+  durationSec: number,
   format: 'mp4' | 'webp' = 'mp4',
-  audioSource: AudioSource = AUDIO_SYSTEM,
   fps = 60,
-): Promise<RecordHandle> {
-  const started = await window.capture.startFrameCapture(target, fps, includeCursor, format)
-  if (!started.ok) throw new Error(started.error || 'failed to start frame capture')
-  const actualSize = { width: started.width ?? target.width, height: started.height ?? target.height }
-
-  // 音声のみ録音(system=ループバック / deviceId=入力デバイス)。
-  // WebPは画像形式で音声を持てないため、またaudioSource=offのときも録音しない。
-  let audioRec: MediaRecorder | null = null
-  let audioStream: MediaStream | null = null
-  const chunks: Blob[] = []
-  let hadAudio = false
-  try {
-    if (format === 'webp' || audioSource === AUDIO_OFF) throw new Error('skip audio')
-    let audioTrack: MediaStreamTrack | null = null
-    if (audioSource === AUDIO_SYSTEM) {
-      audioStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-      audioStream.getVideoTracks().forEach((t) => t.stop())
-      audioTrack = audioStream.getAudioTracks()[0] ?? null
-    } else {
-      audioTrack = await getDeviceAudioTrack(audioSource)
-      if (audioTrack) audioStream = new MediaStream([audioTrack])
-    }
-    if (audioTrack) {
-      hadAudio = true
-      audioRec = new MediaRecorder(new MediaStream([audioTrack]), {
-        mimeType: 'audio/webm;codecs=opus',
-      })
-      audioRec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
-      audioRec.start(100)
-    }
-  } catch {
-    hadAudio = false
-  }
-
-  return {
-    hadAudio,
-    size: actualSize,
-    stop: async () => {
-      let audioBuf: ArrayBuffer | null = null
-      if (audioRec) {
-        await new Promise<void>((resolve) => {
-          audioRec!.onstop = () => resolve()
-          audioRec!.stop()
-        })
-        audioBuf = await new Blob(chunks, { type: 'audio/webm' }).arrayBuffer()
-      }
-      audioStream?.getTracks().forEach((t) => t.stop())
-      const res = await window.capture.stopFrameCapture(audioBuf)
-      if (res.ok) return { mp4Path: res.mp4Path }
-      return { canceled: res.canceled, error: res.error }
-    },
-  }
+): Promise<RecordResult> {
+  const res = await window.capture.startRender({ target, fps, durationSec, format })
+  if (res.ok) return { mp4Path: res.mp4Path }
+  return { canceled: res.canceled, error: res.error }
 }
