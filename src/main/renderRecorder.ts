@@ -102,7 +102,12 @@ async function reloadIntoVirtualMode(): Promise<void> {
       const ready = await wc
         .executeJavaScript(`!!(window.__iocapRender && window.__iocapRender.ready)`)
         .catch(() => false)
-      if (ready) return
+      if (ready) {
+        // ready確認後、ページの読み込み完了まで待つ。読み込み中にsetZoomFactorすると
+        // ナビゲーションcommit時にズームがリセットされ、低DPR(構図も別)のまま録画される(実測)。
+        if (wc.isLoading()) await waitForLoad(wc, 10000)
+        return
+      }
       await new Promise((r) => setTimeout(r, 100))
     }
     throw new Error('virtual clock not ready after 15s (artwork load timeout)')
