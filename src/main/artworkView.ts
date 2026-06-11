@@ -358,16 +358,23 @@ export async function withCaptureSurface<T>(
 
 /** 作品にresizeを通知し、再描画が落ち着くまで複数フレーム待つ。 */
 async function settleAfterDprChange(wc: Electron.WebContents): Promise<void> {
-  await wc
-    .executeJavaScript(
-      `new Promise((res) => {
-        window.dispatchEvent(new Event('resize'));
-        let n = 0;
-        const tick = () => (++n < 6 ? requestAnimationFrame(tick) : res(true));
-        requestAnimationFrame(tick);
-      })`,
-    )
-    .catch(() => {})
+  // 作品がrAFを乗っ取る等どんな状況でも確保処理がハングしないように、上限2秒で打ち切る。
+  await Promise.race([
+    wc
+      .executeJavaScript(
+        `new Promise((res) => {
+          window.dispatchEvent(new Event('resize'));
+          // Renderモード(仮想時計)ではrAFはstep()まで発火しないため即解決する
+          // (高DPRでの再描画はレンダリングループのstepが駆動する)。
+          if (window.__iocapRender) { res(true); return; }
+          let n = 0;
+          const tick = () => (++n < 6 ? requestAnimationFrame(tick) : res(true));
+          requestAnimationFrame(tick);
+        })`
+      )
+      .catch(() => {}),
+    new Promise((r) => setTimeout(r, 2000))
+  ])
   // 重い作品の描画完了を少し余分に待つ。
   await new Promise((r) => setTimeout(r, 120))
 }
