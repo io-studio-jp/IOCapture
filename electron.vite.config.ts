@@ -14,6 +14,7 @@ export default defineConfig({
   // 注意: preloadビルドはvirtualClock.tsのVIRTUAL_CLOCK_BOOTSTRAP(関数のtoString()注入)を含む。
   // esbuildのkeepNames等、関数本体に__nameヘルパを差し込む変換を有効にすると
   // ページ注入時にReferenceErrorで壊れる。変換設定を変える際はvirtualClockのE2E確認をすること。
+  // また、artwork.tsはindex.tsとモジュールを共有してはならない(共有チャンク化→sandboxed preloadで読み込み失敗)。
   preload: {
     build: {
       rollupOptions: {
