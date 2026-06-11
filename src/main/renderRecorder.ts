@@ -12,17 +12,12 @@ import {
   freezeArtworkPreview,
   unfreezeArtworkPreview
 } from './artworkView'
-import { setVirtualRenderMode } from './renderState'
 import type { StartRenderArgs, RenderResult, RenderProgress } from '../shared/ipc-types'
 
 const ffmpegPath = ffmpegStatic ? ffmpegStatic.replace('app.asar', 'app.asar.unpacked') : null
 
 // 1フレームのstep+描画にかけてよい上限。超えたら作品の暴走とみなして中断する。
 const STEP_TIMEOUT_MS = 5000
-// 仮想時計の準備(リロード+ready)を待つ上限。
-const VIRTUAL_READY_TIMEOUT_MS = 15000
-// レンダリング後、ライブページの読み込み完了を待つ上限(超えても解除して続行する)。
-const LIVE_RELOAD_TIMEOUT_MS = 5000
 
 let active = false
 let cancelRequested = false
@@ -41,88 +36,23 @@ function sendProgress(p: RenderProgress): void {
   win.webContents.send('render:progress', p)
 }
 
-/** ページの読み込み完了(成功/失敗どちらでも)をタイムアウト付きで待つ。 */
-function waitForLoad(wc: Electron.WebContents, timeoutMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    if (wc.isDestroyed()) {
-      resolve()
-      return
-    }
-    const done = (): void => {
-      clearTimeout(timer)
-      if (!wc.isDestroyed()) {
-        wc.removeListener('did-finish-load', done)
-        wc.removeListener('did-fail-load', onFail)
-      }
-      resolve()
-    }
-    const onFail = (
-      _e: unknown,
-      _code: number,
-      _desc: string,
-      _url: string,
-      isMainFrame: boolean
-    ): void => {
-      if (isMainFrame) done()
-    }
-    const timer = setTimeout(done, timeoutMs)
-    wc.once('did-finish-load', done)
-    wc.on('did-fail-load', onFail)
-  })
+/** 常時注入済みの時計シムをその場で仮想モードへ切替える(リロード無し=作品の状態を保持)。 */
+async function engageVirtualClock(wc: Electron.WebContents): Promise<void> {
+  const ready = await wc
+    .executeJavaScript(`!!(window.__iocapRender && window.__iocapRender.ready)`)
+    .catch(() => false)
+  if (!ready) {
+    // シムはpreloadで常時注入されるため、無いのは旧セッションのページ等の例外ケースのみ。
+    throw new Error('artwork preload not active — reload the artwork page once and retry')
+  }
+  await wc.executeJavaScript(`window.__iocapRender.engage()`)
 }
 
-/** 作品ビューを仮想時計モードでリロードし、window.__iocapRender.ready が立つまで待つ。 */
-async function reloadIntoVirtualMode(): Promise<void> {
-  const view = getArtworkView()
-  if (!view) throw new Error('artwork view not ready')
-  const wc = view.webContents
-  setVirtualRenderMode(true)
-
-  // 読み込み失敗は即座に検知する(15秒のサイレントタイムアウトを避ける)。
-  // ERR_ABORTED(-3)は再ナビゲーション等で発生する無害なものなので無視する。
-  let loadError: string | null = null
-  const onFailLoad = (
-    _e: unknown,
-    code: number,
-    desc: string,
-    _url: string,
-    isMainFrame: boolean
-  ): void => {
-    if (isMainFrame && code !== -3) loadError = `artwork load failed: ${desc} (${code})`
-  }
-  wc.on('did-fail-load', onFailLoad)
-  try {
-    wc.reload()
-    // 最初のポーリングは少し待ってからにする(リロードの起動を待つ)。
-    await new Promise((r) => setTimeout(r, 300))
-    const deadline = Date.now() + VIRTUAL_READY_TIMEOUT_MS
-    while (Date.now() < deadline) {
-      if (cancelRequested) throw new Error('render canceled')
-      if (loadError) throw new Error(loadError)
-      const ready = await wc
-        .executeJavaScript(`!!(window.__iocapRender && window.__iocapRender.ready)`)
-        .catch(() => false)
-      if (ready) {
-        // ready確認後、ページの読み込み完了まで待つ。読み込み中にsetZoomFactorすると
-        // ナビゲーションcommit時にズームがリセットされ、低DPR(構図も別)のまま録画される(実測)。
-        if (wc.isLoading()) await waitForLoad(wc, 10000)
-        return
-      }
-      await new Promise((r) => setTimeout(r, 100))
-    }
-    throw new Error('virtual clock not ready after 15s (artwork load timeout)')
-  } finally {
-    if (!wc.isDestroyed()) wc.removeListener('did-fail-load', onFailLoad)
-  }
-}
-
-/** 作品ビューをライブモードに戻す。 */
-function reloadIntoLiveMode(): void {
-  // ウィンドウが閉じられていてもフラグは必ず戻す(次に開いたビューへ仮想時計が漏れるのを防ぐ)。
-  setVirtualRenderMode(false)
-  const view = getArtworkView()
-  if (!view || view.webContents.isDestroyed()) return
-  view.webContents.reload()
+/** 実時間動作へ復帰する(仮想モードでなければ何もしない)。 */
+function disengageVirtualClock(): void {
+  const wc = getArtworkView()?.webContents
+  if (!wc || wc.isDestroyed()) return
+  wc.executeJavaScript(`window.__iocapRender && window.__iocapRender.disengage()`).catch(() => {})
 }
 
 // 辺長を2の倍数に丸める(libx264はodd幅を拒否する)。最小2px。
@@ -153,11 +83,11 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
   let surface: Awaited<ReturnType<typeof acquireCaptureSurface>> | null = null
 
   try {
-    // 1. リロード前にライブの見た目でプレビューを固定する(ユーザーに再起動が見えない)。
+    // 1. 現在の見た目でプレビューを固定する(録画中のサーフェス操作をユーザーに見せない)。
     await freezeArtworkPreview()
 
-    // 2. 仮想時計モードでリロード。
-    await reloadIntoVirtualMode()
+    // 2. 時計シムをその場で仮想モードへ(リロード無し=作品の状態・パラメータを保持)。
+    await engageVirtualClock(view.webContents)
 
     // 3. キャプチャサーフェスを確保(内部のfreezeはfrozenフラグで既にスキップされる)。
     surface = await acquireCaptureSurface(size)
@@ -310,20 +240,17 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
     active = false
     // 2. 一時ディレクトリを削除
     if (tmpDir) await rm(tmpDir, { recursive: true, force: true }).catch(() => {})
-    // 3. バックグラウンドスロットリングを通常運用に戻す
+    // 3. 時計シムを実時間へ復帰(リロード無し。作品はその状態のまま動き出す)
+    disengageVirtualClock()
+    // 4. バックグラウンドスロットリングを通常運用に戻す
     try {
       if (!view.webContents.isDestroyed()) view.webContents.setBackgroundThrottling(true)
     } catch {
       // 破棄競合等は無視(復帰処理を止めない)
     }
-    // 4. ライブモードへ復帰(実時間に戻り始める)
-    reloadIntoLiveMode()
-    // 5. ライブページの読み込み完了を待つ(固定解除時に空白のリロード画面を見せない)
-    const liveWc = getArtworkView()?.webContents
-    if (liveWc) await waitForLoad(liveWc, LIVE_RELOAD_TIMEOUT_MS)
-    // 6. サーフェス解放(bounds/zoom復元+120ms待機+unfreeze)
+    // 5. サーフェス解放(bounds/zoom復元+120ms待機+unfreeze)
     await surface?.release().catch(() => {})
-    // 7. プレビュー固定を解除(native-pathではreleaseがno-opでunfreezeしないため必要)
+    // 6. プレビュー固定を解除(native-pathではreleaseがno-opでunfreezeしないため必要)
     unfreezeArtworkPreview()
   }
 }

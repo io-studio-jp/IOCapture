@@ -28,7 +28,6 @@ export const IPC = {
   checkUpdate: 'app:checkUpdate',
   startRender: 'video:startRender',
   cancelRender: 'video:cancelRender',
-  renderIsVirtual: 'render:isVirtual', // 注意: preload/artwork.tsは自己完結のためリテラルで同じ値を持つ
 } as const
 
 export type UpdateInfo = { update: boolean; version?: string; url?: string }

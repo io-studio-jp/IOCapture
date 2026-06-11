@@ -233,7 +233,7 @@ export function VideoControls({
       <p className="text-xs text-muted-foreground">
         {mode === 'live'
           ? 'Screen recording · audio & cursor · capped at screen res'
-          : 'Offline render · exact fps at any resolution · no audio · restarts artwork'}
+          : 'Offline render · exact fps at any resolution · no audio · records from the current state'}
       </p>
 
       {/* 出力フォーマット（mp4 / WebP）。 */}

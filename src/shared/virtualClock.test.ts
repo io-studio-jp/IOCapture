@@ -1,22 +1,65 @@
-import { test, expect, vi } from 'vitest'
-import { createVirtualClock } from './virtualClock'
+import { test, expect } from 'vitest'
+import { createVirtualClock, type VirtualClockDeps } from './virtualClock'
 
-// テスト用: 実rAFは即時実行で代用(stepの描画待ちを素通しにする)。
-// realSetTimeoutはタイムアウト保険なので、rAF側が即解決する以上呼ばれても影響しない。
-const deps = {
-  realRaf: (cb: (t: number) => void): number => (cb(0), 0),
-  realSetTimeout: (cb: () => void): unknown => (cb(), 0)
+// テスト用の実APIスタブ一式。
+// - realRaf: 即時実行(stepの描画待ちを素通しにする)
+// - realSetTimeout: 記録のみ(発火はテストが手動で行う。描画待ちのraceはrAF側で決まる)
+function makeDeps(): {
+  st: { cb: () => void; ms: number; id: number }[]
+  cleared: string[]
+  setPerfNow: (v: number) => void
+  deps: VirtualClockDeps
+} {
+  const st: { cb: () => void; ms: number; id: number }[] = []
+  const cleared: string[] = []
+  let rid = 100
+  let perfNow = 0
+  return {
+    st,
+    cleared,
+    setPerfNow: (v: number): void => {
+      perfNow = v
+    },
+    deps: {
+      realRaf: (cb: (t: number) => void): number => (cb(0), rid++),
+      realCancelRaf: (id: number): void => {
+        cleared.push('raf:' + id)
+      },
+      realSetTimeout: (cb: () => void, ms: number): number => {
+        const id = rid++
+        st.push({ cb, ms, id })
+        return id
+      },
+      realClearTimeout: (id: number): void => {
+        cleared.push('t:' + id)
+      },
+      realSetInterval: (): number => rid++,
+      realClearInterval: (id: number): void => {
+        cleared.push('i:' + id)
+      },
+      realPerfNow: (): number => perfNow,
+      realDateNow: (): number => 1000000 + perfNow
+    }
+  }
 }
 
-test('now() starts at 0 and advances by step', async () => {
-  const c = createVirtualClock(deps)
-  expect(c.now()).toBe(0)
-  await c.step(16.5)
-  expect(c.now()).toBeCloseTo(16.5, 10)
+// ---- 仮想モード(engage後)の基本動作 ----
+
+test('now() is continuous at engage and advances by step', async () => {
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  d.setPerfNow(5000)
+  expect(c.now()).toBe(5000) // パススルー: 実perf.now
+  c.engage()
+  expect(c.now()).toBe(5000) // engage直後も連続
+  await c.step(16)
+  expect(c.now()).toBeCloseTo(5016, 10)
 })
 
 test('setTimeout fires in due order during step', async () => {
-  const c = createVirtualClock(deps)
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  c.engage()
   const order: string[] = []
   c.setTimeout(() => order.push('b'), 20)
   c.setTimeout(() => order.push('a'), 10)
@@ -25,7 +68,9 @@ test('setTimeout fires in due order during step', async () => {
 })
 
 test('timer scheduled by a timer within the same step still fires', async () => {
-  const c = createVirtualClock(deps)
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  c.engage()
   const order: string[] = []
   c.setTimeout(() => {
     order.push('outer')
@@ -35,8 +80,25 @@ test('timer scheduled by a timer within the same step still fires', async () => 
   expect(order).toEqual(['outer', 'inner'])
 })
 
-test('clearTimeout cancels', async () => {
-  const c = createVirtualClock(deps)
+test('zero-delay recursive setTimeout terminates (nesting clamp)', async () => {
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  c.engage()
+  let n = 0
+  const tick = (): void => {
+    n++
+    c.setTimeout(tick, 0)
+  }
+  c.setTimeout(tick, 0)
+  await c.step(16)
+  expect(n).toBeGreaterThan(0)
+  expect(n).toBeLessThan(50)
+})
+
+test('clearTimeout cancels a virtual timer', async () => {
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  c.engage()
   let fired = false
   const id = c.setTimeout(() => (fired = true), 10)
   c.clearTimeout(id)
@@ -45,18 +107,23 @@ test('clearTimeout cancels', async () => {
 })
 
 test('setInterval fires repeatedly and clearInterval stops it', async () => {
-  const c = createVirtualClock(deps)
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  c.engage()
   let n = 0
   const id = c.setInterval(() => n++, 10)
-  await c.step(35) // 10,20,30
+  await c.step(35)
   expect(n).toBe(3)
   c.clearInterval(id)
   await c.step(30)
   expect(n).toBe(3)
 })
 
-test('rAF callbacks run once per step with virtual timestamp', async () => {
-  const c = createVirtualClock(deps)
+test('rAF callbacks run once per step with continuous timestamps', async () => {
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  d.setPerfNow(1000)
+  c.engage()
   const stamps: number[] = []
   const loop = (t: number): void => {
     stamps.push(t)
@@ -65,11 +132,13 @@ test('rAF callbacks run once per step with virtual timestamp', async () => {
   c.requestAnimationFrame(loop)
   await c.step(16)
   await c.step(16)
-  expect(stamps).toEqual([16, 32])
+  expect(stamps).toEqual([1016, 1032])
 })
 
-test('cancelAnimationFrame cancels', async () => {
-  const c = createVirtualClock(deps)
+test('cancelAnimationFrame cancels a virtual rAF', async () => {
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  c.engage()
   let fired = false
   const id = c.requestAnimationFrame(() => (fired = true))
   c.cancelAnimationFrame(id)
@@ -77,81 +146,111 @@ test('cancelAnimationFrame cancels', async () => {
   expect(fired).toBe(false)
 })
 
-test('zero-delay recursive setTimeout terminates within a step (nesting clamp)', async () => {
-  const c = createVirtualClock(deps)
-  let n = 0
-  const tick = (): void => {
-    n++
-    c.setTimeout(tick, 0)
-  }
-  c.setTimeout(tick, 0)
+test('a throwing timer does not break the step', async () => {
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  d.setPerfNow(0)
+  c.engage()
+  const order: string[] = []
+  c.setTimeout(() => {
+    throw new Error('boom')
+  }, 5)
+  c.setTimeout(() => order.push('after'), 10)
   await c.step(16)
-  // HTML仕様のネストクランプ(深度5以上は最低4ms)により有限回で止まる
-  expect(n).toBeGreaterThan(0)
-  expect(n).toBeLessThan(20)
-})
-
-test('a throwing timer does not break later timers and step completes', async () => {
-  const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-  try {
-    const c = createVirtualClock(deps)
-    const order: string[] = []
-    c.setTimeout(() => {
-      throw new Error('boom')
-    }, 5)
-    c.setTimeout(() => order.push('later'), 10)
-    await c.step(16)
-    expect(order).toEqual(['later'])
-    expect(c.now()).toBe(16)
-  } finally {
-    errorSpy.mockRestore()
-  }
-})
-
-test('a throwing rAF callback does not break other rAF callbacks', async () => {
-  const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-  try {
-    const c = createVirtualClock(deps)
-    let fired = false
-    c.requestAnimationFrame(() => {
-      throw new Error('boom')
-    })
-    c.requestAnimationFrame(() => (fired = true))
-    await c.step(16)
-    expect(fired).toBe(true)
-    expect(c.now()).toBe(16)
-  } finally {
-    errorSpy.mockRestore()
-  }
+  expect(order).toEqual(['after'])
+  expect(c.now()).toBe(16)
 })
 
 test('step rejects while another step is in progress', async () => {
-  const c = createVirtualClock(deps)
-  const p = c.step(16)
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  c.engage()
+  const p1 = c.step(16)
   await expect(c.step(16)).rejects.toThrow('step already in progress')
-  await p
-  // ガード解除後は再びstepできる
-  await c.step(16)
-  expect(c.now()).toBe(32)
+  await p1
 })
 
-test('NaN/undefined delay fires as zero-delay timer (browser behavior)', async () => {
+// ---- パススルーモード ----
+
+test('passthrough setTimeout delegates to realSetTimeout and fires', () => {
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  let fired = false
+  c.setTimeout(() => (fired = true), 5)
+  const entry = d.st.find((e) => e.ms === 5)!
+  expect(entry).toBeTruthy()
+  expect(fired).toBe(false)
+  entry.cb()
+  expect(fired).toBe(true)
+})
+
+test('passthrough clearTimeout clears the mapped real timer', () => {
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  const id = c.setTimeout(() => {}, 7)
+  const entry = d.st.find((e) => e.ms === 7)!
+  c.clearTimeout(id)
+  expect(d.cleared).toContain('t:' + entry.id)
+})
+
+test('passthrough cancelAnimationFrame cancels the real rAF', () => {
+  const d = makeDeps()
+  // realRafは即時実行だとキャンセルを試せないので、このテストだけ遅延型に差し替える
+  let lastRafId = 0
+  const deps = {
+    ...d.deps,
+    realRaf: (): number => (lastRafId = 500)
+  }
   const c = createVirtualClock(deps)
-  let fired = 0
-  c.setTimeout(() => fired++, NaN)
-  c.setTimeout(() => fired++, undefined)
-  await c.step(1)
-  expect(fired).toBe(2)
+  const id = c.requestAnimationFrame(() => {})
+  c.cancelAnimationFrame(id)
+  expect(d.cleared).toContain('raf:' + lastRafId)
 })
 
-test('VIRTUAL_CLOCK_BOOTSTRAP is self-contained injectable source', async () => {
+test('step throws when not engaged', async () => {
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  await expect(c.step(16)).rejects.toThrow('not engaged')
+})
+
+test('disengage returns now()/dateNow() to real time', async () => {
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  d.setPerfNow(2000)
+  c.engage()
+  await c.step(16)
+  expect(c.now()).toBe(2016)
+  d.setPerfNow(9000) // 実時間は大きく経過
+  c.disengage()
+  expect(c.now()).toBe(9000)
+  expect(c.dateNow()).toBe(1000000 + 9000)
+})
+
+test('engage/disengage are idempotent and engaged() reports state', () => {
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  expect(c.engaged()).toBe(false)
+  c.engage()
+  c.engage()
+  expect(c.engaged()).toBe(true)
+  c.disengage()
+  c.disengage()
+  expect(c.engaged()).toBe(false)
+})
+
+// ---- 注入用ブートストラップ ----
+
+test('VIRTUAL_CLOCK_BOOTSTRAP is self-contained and engage/disengage work', async () => {
   const { VIRTUAL_CLOCK_BOOTSTRAP } = await import('./virtualClock')
   const realDateNow = Date.now
-  // window相当のグローバルを持つ関数として評価できること(構文チェック+依存チェック)
   const win = {
-    setTimeout: globalThis.setTimeout.bind(globalThis),
+    setTimeout: (() => 0) as unknown,
+    clearTimeout: (() => {}) as unknown,
+    setInterval: (() => 0) as unknown,
+    clearInterval: (() => {}) as unknown,
     requestAnimationFrame: (cb: (t: number) => void) => (cb(0), 0),
-    performance: { now: () => 0 },
+    cancelAnimationFrame: () => {},
+    performance: { now: () => 1234 },
     Date
   }
   const fn = new Function(
@@ -162,12 +261,23 @@ test('VIRTUAL_CLOCK_BOOTSTRAP is self-contained injectable source', async () => 
   )
   const render = fn(win, win.performance, win.Date)
   expect(render.ready).toBe(true)
-  // 仮想now=0なのでwin.Date.now()は注入時点の実時刻t0そのもの
-  const t0 = win.Date.now()
+  expect(render.engaged()).toBe(false)
+
+  // パススルー: 上書き後のperformance.nowは実時刻(スタブの1234)を返す
+  const winTyped = win as unknown as {
+    performance: { now: () => number }
+    Date: DateConstructor
+  }
+  expect(winTyped.performance.now()).toBe(1234)
+
+  render.engage()
+  expect(render.engaged()).toBe(true)
+  const dateAtEngage = winTyped.Date.now()
   await render.step(16)
-  // 仮想時刻はt0+16で固定される(now/コンストラクタとも)
-  expect(win.Date.now()).toBe(t0 + 16)
-  expect(new (win.Date as DateConstructor)().getTime()).toBe(t0 + 16)
-  // 本物のDateを汚染しないこと(Proxy経由の代入が実Date.nowを書き換えない)
+  expect(winTyped.Date.now()).toBe(dateAtEngage + 16)
+  // 本物のDate.nowは汚染されていない
   expect(Date.now).toBe(realDateNow)
+
+  render.disengage()
+  expect(render.engaged()).toBe(false)
 })

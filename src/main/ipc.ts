@@ -16,7 +16,6 @@ import { captureStill, captureStillTo } from './capture'
 import { convertToMp4, saveWebmAs } from './ffmpeg'
 import { startRender, cancelRender, isRendering } from './renderRecorder'
 import { getLastUrl, getPrefs, setPrefs } from './state'
-import { isVirtualRenderMode } from './renderState'
 import { checkForUpdate } from './updater'
 
 export function registerIpc(getWindow: () => BrowserWindow): void {
@@ -76,11 +75,6 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url)
   })
   ipcMain.handle(IPC.checkUpdate, () => checkForUpdate())
-
-  // 作品preloadがRenderモード(仮想時計)かを同期で問い合わせる
-  ipcMain.on(IPC.renderIsVirtual, (e) => {
-    e.returnValue = isVirtualRenderMode()
-  })
 
   ipcMain.handle(IPC.startRender, (_e, args: StartRenderArgs) => startRender(args))
   ipcMain.on(IPC.cancelRender, () => cancelRender())
