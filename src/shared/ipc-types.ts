@@ -76,7 +76,12 @@ export type Prefs = {
   stillTimer?: number
   videoTimer?: number
   includeCursor?: boolean
+  // 旧: 録画エンジン(captureModeへ移行済み。読み取りのみ)
   captureEngine?: 'frame' | 'screen'
+  // 録画モード: live=画面録画(音声/カーソル) / render=オフラインレンダリング(4K60保証)
+  captureMode?: 'live' | 'render'
+  // Renderモードの録画秒数
+  renderLengthSec?: number
   outputDir?: string
   intervalCount?: number
   intervalSec?: number
