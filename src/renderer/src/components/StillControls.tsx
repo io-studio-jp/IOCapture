@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import type { Aspect } from '../../../shared/aspect'
+import type { Rect } from '../../../shared/frameRect'
 import { targetFromLongEdge, targetFromWidthCm } from '../../../shared/resolution'
 import { capToGpuLimit } from '../../../shared/dpr'
 import { Button } from '@/components/ui/button'
@@ -8,7 +9,13 @@ import { Label } from '@/components/ui/label'
 import { Camera, FolderOpen, Layers } from 'lucide-react'
 import { toast } from 'sonner'
 
-export function StillControls({ aspect }: { aspect: Aspect }) {
+export function StillControls({
+  aspect,
+  getFrameRect,
+}: {
+  aspect: Aspect
+  getFrameRect: () => Rect
+}) {
   // 機能3: プリセット記憶 - prefsから初期値を取得
   const [mode, setModeState] = useState<'px' | 'cm'>(() => window.capture.getPrefs().stillMode ?? 'px')
   const [longEdge, setLongEdgeState] = useState(() => window.capture.getPrefs().longEdge ?? 3000)
@@ -162,8 +169,22 @@ export function StillControls({ aspect }: { aspect: Aspect }) {
           </div>
         </div>
       )}
-      {/* 機能4: 出力解像度の数値表示 */}
+      {/* 機能4: 出力解像度の数値表示。画面表示の物理pxも添える(それ未満の指定では
+          等倍比較で画面のほうが高精細になるため、超えたい場合の目安を示す) */}
       <p className="text-xs text-muted-foreground">→ {target.width}×{target.height} px</p>
+      {(() => {
+        const rect = getFrameRect()
+        const dpr = window.devicePixelRatio || 1
+        const nativeLong = Math.round(Math.max(rect.width, rect.height) * dpr)
+        if (nativeLong > 0 && Math.max(target.width, target.height) < nativeLong) {
+          return (
+            <p className="text-xs text-muted-foreground">
+              Screen shows ≈ {nativeLong} px (long edge). Use a larger size to exceed screen detail.
+            </p>
+          )
+        }
+        return null
+      })()}
       {/* セルフタイマー */}
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Timer</Label>

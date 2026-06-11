@@ -1,8 +1,7 @@
 import { dialog } from 'electron'
 import { writeFile } from 'fs/promises'
 import { join, resolve, sep } from 'path'
-import { withDeviceScale, getArtworkView } from './artworkView'
-import { deriveDeviceScaleFactor } from '../shared/dpr'
+import { withCaptureSurface, getArtworkView } from './artworkView'
 import type {
   CaptureStillArgs,
   CaptureStillResult,
@@ -10,12 +9,11 @@ import type {
 } from '../shared/ipc-types'
 import type { TargetSize } from '../shared/resolution'
 
-// 高DPRで撮影し、指定ピクセルへ厳密に整えたPNGバッファを返す。
+// 目標物理pxの実レンダリング面で撮影し、指定ピクセルへ厳密に整えたPNGバッファを返す。
 async function capturePng(target: TargetSize): Promise<Buffer> {
   const view = getArtworkView()
   if (!view) throw new Error('view not ready')
-  const scale = deriveDeviceScaleFactor(target.width, view.getBounds().width)
-  const image = await withDeviceScale(scale, async (v) => v.webContents.capturePage())
+  const image = await withCaptureSurface(target, async (v) => v.webContents.capturePage())
   const sized =
     image.getSize().width === target.width && image.getSize().height === target.height
       ? image

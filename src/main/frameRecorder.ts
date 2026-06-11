@@ -8,7 +8,9 @@ import { once } from 'events'
 import ffmpegStatic from 'ffmpeg-static'
 import { getArtworkView } from './artworkView'
 import { drawCursor, ARROW_ROWS } from './cursorSprite'
+import { capToSourceWidth } from '../shared/videoResolution'
 import type { TargetSize } from '../shared/resolution'
+import type { StartFrameCaptureResult } from '../shared/ipc-types'
 
 const ffmpegPath = ffmpegStatic ? ffmpegStatic.replace('app.asar', 'app.asar.unpacked') : null
 
@@ -46,7 +48,7 @@ export async function startFrameCapture(
   fps: number,
   includeCursor = false,
   fmt: 'mp4' | 'webp' = 'mp4',
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<StartFrameCaptureResult> {
   const view = getArtworkView()
   if (!view) return { ok: false, error: 'view not ready' }
   if (!ffmpegPath) return { ok: false, error: 'ffmpeg binary not found' }
@@ -58,7 +60,6 @@ export async function startFrameCapture(
   // 実際にキャプチャできる解像度を測り、targetがそれを超える場合はアップスケールしない
   // （引き伸ばし＋ロス圧縮による「ガビガビ」を防ぐ）。viewはframeと同アスペクトなので
   // 幅基準のスケールでアスペクトは保たれる。
-  const round2 = (n: number): number => Math.max(2, Math.round(n / 2) * 2)
   let nativeW = target.width
   try {
     const probe = await view.webContents.capturePage()
@@ -69,8 +70,7 @@ export async function startFrameCapture(
   } catch {
     // 測定失敗時はtargetのまま
   }
-  const fit = Math.min(1, nativeW / target.width)
-  size = { width: round2(target.width * fit), height: round2(target.height * fit) }
+  size = capToSourceWidth(target, nativeW)
 
   tmpDir = await mkdtemp(join(tmpdir(), 'iocapture-'))
   videoPath = join(tmpDir, format === 'webp' ? 'video.webp' : 'video.mp4')
@@ -151,7 +151,7 @@ export async function startFrameCapture(
   }
   void captureLoop()
 
-  return { ok: true }
+  return { ok: true, width: size.width, height: size.height }
 }
 
 function stopCaptureLoop(): void {

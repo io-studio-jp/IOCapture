@@ -9,6 +9,16 @@ function sizeForShortEdge(aspect: Aspect, height: number): TargetSize {
   return { width, height }
 }
 
+/**
+ * ソースの実解像度(幅)を超えるターゲットを、アスペクトを保ってソース幅まで縮める。
+ * 引き伸ばし＋ロス圧縮による画質劣化(ガビガビ)を防ぐ。動画コーデック向けに偶数丸め。
+ */
+export function capToSourceWidth(target: TargetSize, sourceWidth: number): TargetSize {
+  const round2 = (n: number): number => Math.max(2, Math.round(n / 2) * 2)
+  const fit = Math.min(1, sourceWidth / target.width)
+  return { width: round2(target.width * fit), height: round2(target.height * fit) }
+}
+
 export function videoPresetsFor(
   aspect: Aspect,
 ): { label: string; size: TargetSize | null }[] {

@@ -126,6 +126,14 @@ export function VideoControls({
         handleRef.current = await startRecording(target, includeCursor, format, audioSource)
       }
       setRecording(true)
+      // 録画解像度は表示中のビューの物理解像度が上限。要求より小さくキャップされたら知らせる
+      // (ウィンドウを大きくすれば上がる)。
+      const actual = handleRef.current.size
+      if (actual.width < target.width) {
+        toast.info(`Recording at ${actual.width}×${actual.height}`, {
+          description: 'Limited by on-screen size. Enlarge the window for higher resolution.',
+        })
+      }
       // 音声を録るはずだったのに取れなかったときだけ警告(原因はソースにより異なる)
       if (effectiveFormat === 'mp4' && audioSource !== AUDIO_OFF && !handleRef.current.hadAudio) {
         toast.warning(

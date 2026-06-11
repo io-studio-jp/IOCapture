@@ -1,9 +1,6 @@
 import { test, expect } from 'vitest'
-import { deriveDeviceScaleFactor, MAX_GPU_DIMENSION, capToGpuLimit } from './dpr'
+import { MAX_GPU_DIMENSION, capToGpuLimit } from './dpr'
 
-test('deriveDeviceScaleFactor = target / css', () => {
-  expect(deriveDeviceScaleFactor(2400, 800)).toBe(3)
-})
 test('capToGpuLimit leaves small sizes untouched', () => {
   expect(capToGpuLimit({ width: 2000, height: 1000 })).toEqual({
     ok: true,

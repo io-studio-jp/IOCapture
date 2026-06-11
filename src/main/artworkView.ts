@@ -1,5 +1,7 @@
-import { WebContentsView, BrowserWindow } from 'electron'
+import { WebContentsView, BrowserWindow, screen, ipcMain } from 'electron'
 import type { Rect } from '../shared/frameRect'
+import type { TargetSize } from '../shared/resolution'
+import { planCaptureSurface } from '../shared/captureSurface'
 import { setLastUrl } from './state'
 
 let view: WebContentsView | null = null
@@ -218,30 +220,83 @@ export function stopPicking(): void {
     .catch(() => {})
 }
 
-/** 撮る瞬間だけ高DPRにする。終わったら戻す。 */
-export async function withDeviceScale<T>(
-  scale: number,
+// 拡大撮影中、viewはウィンドウ左端にこの幅だけ残して画面外へ退避する。
+// 完全に画面外へ出すとコンポジタが新しいサーフェスを描画しない(実測)ため、最小限を残す。
+const CAPTURE_SLIVER_PX = 2
+// プレビュー固定(フリーズ画像)の表示完了を待つ上限。レンダラーが応答しなくても撮影は続行する。
+const FREEZE_READY_TIMEOUT_MS = 300
+
+/** 直前の見た目をレンダラーに送り、フレーム位置へ固定表示されるのを待つ(撮影中の見た目の変化を隠す)。 */
+async function freezePreview(wc: Electron.WebContents): Promise<void> {
+  if (!mainWin || mainWin.isDestroyed() || mainWin.webContents.isDestroyed()) return
+  try {
+    const snap = await wc.capturePage()
+    await new Promise<void>((resolve) => {
+      const onReady = (): void => {
+        clearTimeout(timer)
+        resolve()
+      }
+      const timer = setTimeout(() => {
+        ipcMain.removeListener('capture:freezeReady', onReady)
+        resolve()
+      }, FREEZE_READY_TIMEOUT_MS)
+      ipcMain.once('capture:freezeReady', onReady)
+      mainWin!.webContents.send('capture:freeze', snap.toDataURL())
+    })
+  } catch {
+    // フリーズ表示に失敗しても撮影自体は続行する(見た目が一瞬変わるだけ)
+  }
+}
+
+function unfreezePreview(): void {
+  sendMain('capture:unfreeze', null)
+}
+
+/**
+ * targetが表示の物理px以下なら、viewをそのまま撮る(呼び出し側が高品質縮小で合わせる)。
+ * 表示を超えるtargetでは、撮る瞬間だけviewのboundsを目標物理pxぶんに拡大し、zoomFactorで
+ * レイアウト幅を維持して撮り、終わったら戻す。enableDeviceEmulationのdeviceScaleFactorは
+ * capturePageの解像度に反映されない(表示DPRのまま)ため、実際にレンダリング面を広げて撮る。
+ * boundsがウィンドウより大きくてもcapturePageは全面を返し、zoomはdevicePixelRatioに
+ * 反映されるのでcanvas作品も高解像度で再描画される。
+ * 拡大中はプレビューが乱れるため、直前のスナップショットをレンダラーに固定表示させた上で
+ * viewを左端2pxだけ残して画面外へ退避する(ユーザーには見た目の変化がほぼ無い)。
+ */
+export async function withCaptureSurface<T>(
+  target: TargetSize,
   fn: (v: WebContentsView) => Promise<T>,
 ): Promise<T> {
   if (!view) throw new Error('artwork view not ready')
   const wc = view.webContents
-  wc.enableDeviceEmulation({
-    screenPosition: 'desktop',
-    screenSize: { width: 0, height: 0 },
-    viewPosition: { x: 0, y: 0 },
-    viewSize: { width: 0, height: 0 },
-    scale: 1,
-    deviceScaleFactor: scale,
+  const prevBounds = view.getBounds()
+  const prevZoom = wc.getZoomFactor()
+  const sf =
+    mainWin && !mainWin.isDestroyed()
+      ? screen.getDisplayMatching(mainWin.getBounds()).scaleFactor
+      : screen.getPrimaryDisplay().scaleFactor
+  const plan = planCaptureSurface(target, prevBounds.width, sf)
+  if (plan.kind === 'native') return fn(view)
+
+  await freezePreview(wc)
+  view.setBounds({
+    x: CAPTURE_SLIVER_PX - plan.bounds.width,
+    y: prevBounds.y,
+    ...plan.bounds,
   })
+  wc.setZoomFactor(plan.zoomFactor)
   try {
-    // DPRを上げただけでは多くの作品はcanvasを描き直さない。
+    // サイズ・DPRを変えただけでは多くの作品はcanvasを描き直さない。
     // resizeイベントを送って作品自身に高解像度バッファで再描画させ、数フレーム安定を待つ。
     await settleAfterDprChange(wc)
     return await fn(view!)
   } finally {
-    wc.disableDeviceEmulation()
-    // 表示を元のDPRへ戻すため、作品にもう一度再レイアウトを促す。
+    wc.setZoomFactor(prevZoom)
+    view.setBounds(prevBounds)
+    // 表示を元へ戻すため、作品にもう一度再レイアウトを促す。
     wc.executeJavaScript(`window.dispatchEvent(new Event('resize'))`).catch(() => {})
+    // 元のサイズでの再描画が画面に乗るまで少し待ってからフリーズ画像を外す(復帰の乱れを隠す)。
+    await new Promise((r) => setTimeout(r, 120))
+    unfreezePreview()
   }
 }
 

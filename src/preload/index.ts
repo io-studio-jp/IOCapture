@@ -72,6 +72,19 @@ const api = {
     ipcRenderer.on('artwork:hideSelectorsChanged', handler)
     return (): void => { ipcRenderer.removeListener('artwork:hideSelectorsChanged', handler) }
   },
+  // 高解像度撮影中のプレビュー固定: Mainが直前のスナップショットを送ってくるので
+  // フレーム位置に表示し、表示できたらfreezeReadyで知らせる。解除はunfreeze。
+  onCaptureFreeze: (cb: (dataUrl: string) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, dataUrl: string): void => cb(dataUrl)
+    ipcRenderer.on('capture:freeze', handler)
+    return (): void => { ipcRenderer.removeListener('capture:freeze', handler) }
+  },
+  onCaptureUnfreeze: (cb: () => void) => {
+    const handler = (): void => cb()
+    ipcRenderer.on('capture:unfreeze', handler)
+    return (): void => { ipcRenderer.removeListener('capture:unfreeze', handler) }
+  },
+  captureFreezeReady: () => ipcRenderer.send('capture:freezeReady'),
 }
 
 if (process.contextIsolated) {

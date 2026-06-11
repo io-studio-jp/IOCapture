@@ -1,5 +1,6 @@
 import type { TargetSize } from '../../../shared/resolution'
 import type { Rect } from '../../../shared/frameRect'
+import { capToSourceWidth } from '../../../shared/videoResolution'
 import { AUDIO_OFF, AUDIO_SYSTEM, type AudioSource } from '../../../shared/audioSource'
 
 /** 指定deviceIdの音声入力トラックを取得する。失敗(未接続・権限拒否)はnull。 */
@@ -17,6 +18,8 @@ async function getDeviceAudioTrack(deviceId: string): Promise<MediaStreamTrack |
 export type RecordResult = { mp4Path: string } | { canceled?: boolean; error?: string }
 export type RecordHandle = {
   hadAudio: boolean
+  /** 実際に録画される解像度。表示中のビューの物理解像度が上限のため、要求targetより小さいことがある。 */
+  size: TargetSize
   stop: () => Promise<RecordResult>
 }
 
@@ -49,14 +52,17 @@ export async function startWindowRecording(
   await videoEl.play()
 
   const dpr = window.devicePixelRatio || 1
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.round(target.width / 2) * 2
-  canvas.height = Math.round(target.height / 2) * 2
-  const ctx = canvas.getContext('2d')!
   const sx = (frameRect.x + inset.x) * dpr
   const sy = (frameRect.y + inset.y) * dpr
   const sw = frameRect.width * dpr
   const sh = frameRect.height * dpr
+  // ソース(クロップ領域の物理px)を超えるターゲットは引き伸ばさずキャップする
+  // (拡大＋リアルタイムVP8圧縮による画質劣化を防ぐ。縮小はOK)。
+  const outSize = capToSourceWidth(target, sw)
+  const canvas = document.createElement('canvas')
+  canvas.width = outSize.width
+  canvas.height = outSize.height
+  const ctx = canvas.getContext('2d')!
 
   let raf = 0
   const draw = (): void => {
@@ -79,6 +85,7 @@ export async function startWindowRecording(
 
   return {
     hadAudio,
+    size: outSize,
     stop: () =>
       new Promise<RecordResult>((resolve) => {
         rec.onstop = async () => {
@@ -110,6 +117,7 @@ export async function startRecording(
 ): Promise<RecordHandle> {
   const started = await window.capture.startFrameCapture(target, fps, includeCursor, format)
   if (!started.ok) throw new Error(started.error || 'failed to start frame capture')
+  const actualSize = { width: started.width ?? target.width, height: started.height ?? target.height }
 
   // 音声のみ録音(system=ループバック / deviceId=入力デバイス)。
   // WebPは画像形式で音声を持てないため、またaudioSource=offのときも録音しない。
@@ -142,6 +150,7 @@ export async function startRecording(
 
   return {
     hadAudio,
+    size: actualSize,
     stop: async () => {
       let audioBuf: ArrayBuffer | null = null
       if (audioRec) {

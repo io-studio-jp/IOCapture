@@ -50,7 +50,14 @@ export type StartFrameCaptureArgs = {
   includeCursor: boolean
   format: VideoFormat
 }
-export type StartFrameCaptureResult = { ok: boolean; error?: string }
+// width/height: 実際に録画される解像度。表示中のビューの物理解像度が上限のため、
+// 要求targetより小さくキャップされることがある(UIで知らせる)。
+export type StartFrameCaptureResult = {
+  ok: boolean
+  error?: string
+  width?: number
+  height?: number
+}
 export type StopFrameCaptureArgs = { audio: ArrayBuffer | null }
 export type StopFrameCaptureResult =
   | { ok: true; mp4Path: string }

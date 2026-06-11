@@ -18,6 +18,8 @@ function App() {
   const [hideSelectors, setHide] = useState(() => window.capture.getPrefs().hideSelectors ?? '')
   // クリックで要素を選んで消すピックモードの状態
   const [picking, setPicking] = useState(false)
+  // 高解像度撮影中にフレーム位置へ固定表示するスナップショット(撮影中の見た目の変化を隠す)
+  const [freezeSnap, setFreezeSnap] = useState<string | null>(null)
   const { stageRef, getFrameRect } = useFrameRect(aspect)
 
   // アスペクト変更時にprefsへ保存
@@ -63,12 +65,18 @@ function App() {
     const offPick = window.capture.onPickState((p) => setPicking(p))
     const offHide = window.capture.onHideSelectorsChanged((sel) => setHide(sel))
 
+    // 高解像度撮影中のプレビュー固定(Mainからのフリーズ要求と解除)
+    const offFreeze = window.capture.onCaptureFreeze((dataUrl) => setFreezeSnap(dataUrl))
+    const offUnfreeze = window.capture.onCaptureUnfreeze(() => setFreezeSnap(null))
+
     return () => {
       offError()
       offUrl()
       window.removeEventListener('keydown', onKey)
       offPick()
       offHide()
+      offFreeze()
+      offUnfreeze()
     }
   }, [])
 
@@ -102,6 +110,27 @@ function App() {
       </header>
       <div className="flex flex-1 overflow-hidden">
         <div ref={stageRef} className="relative flex-1 bg-black" />
+        {/* 高解像度撮影中: 作品viewは画面外へ退避するので、直前のスナップショットを
+            フレーム位置(window座標)へ固定表示して見た目の変化を隠す。表示完了をMainへ通知 */}
+        {freezeSnap &&
+          (() => {
+            const r = getFrameRect()
+            return (
+              <img
+                src={freezeSnap}
+                alt=""
+                onLoad={() => window.capture.captureFreezeReady()}
+                style={{
+                  position: 'fixed',
+                  left: r.x,
+                  top: r.y,
+                  width: r.width,
+                  height: r.height,
+                  zIndex: 40,
+                }}
+              />
+            )
+          })()}
         <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-l border-border bg-card">
           <section className="space-y-3 px-5 py-5">
             <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Aspect</h2>
@@ -130,7 +159,7 @@ function App() {
               </Button>
             </div>
           </section>
-          <StillControls aspect={aspect} />
+          <StillControls aspect={aspect} getFrameRect={getFrameRect} />
           <VideoControls aspect={aspect} getFrameRect={getFrameRect} />
           {/* 機能6: Hide elements セクション */}
           <section className="space-y-3 border-t border-border px-5 py-5">
