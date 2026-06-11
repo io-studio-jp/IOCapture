@@ -63,6 +63,8 @@ export function VideoControls({
   // 選択中ソースの入力レベル(0〜1)。off/WebP/取得失敗時はnull
   const audioLevel = useAudioLevel(audioSource, mode === 'live' && format === 'mp4')
   const handleRef = useRef<RecordHandle | null>(null)
+  // 連打による二重起動を防ぐフラグ。startNow実行中はtrueになる
+  const startingRef = useRef(false)
 
   const setFormat = (f: 'mp4' | 'webp'): void => {
     setFormatState(f)
@@ -117,12 +119,16 @@ export function VideoControls({
   }
 
   const startNow = async (): Promise<void> => {
+    // 連打による二重起動を防ぐ
+    if (startingRef.current) return
+    startingRef.current = true
     const rect = getFrameRect()
     const preset = presets.find((p) => p.label === presetLabel)!
     const target = preset.size ?? { width: rect.width, height: rect.height }
     try {
       if (mode === 'render') {
         setRecording(true)
+        startingRef.current = false // RenderはsetRecording(true)で以降onToggleがCancelに分岐する
         setProgress(null)
         const res = await startRenderRecording(target, lengthSec, format)
         setRecording(false)
@@ -138,6 +144,7 @@ export function VideoControls({
       const inset = await window.capture.getContentInset()
       handleRef.current = await startWindowRecording(rect, target, inset, format, audioSource)
       setRecording(true)
+      startingRef.current = false // handleRef確定後に解除
       const actual = handleRef.current.size
       if (actual.width < target.width) {
         toast.info(`Recording at ${actual.width}×${actual.height}`, {
@@ -152,6 +159,7 @@ export function VideoControls({
         )
       }
     } catch (e) {
+      startingRef.current = false
       setRecording(false)
       toast.error(`Could not start recording: ${String(e)}`)
     }
@@ -181,7 +189,8 @@ export function VideoControls({
       return
     }
     if (counting) return
-    if (timer > 0) {
+    // カウントダウンはLiveモードのみ（Renderはt=0から再始動するのでタイマー不要）
+    if (mode === 'live' && timer > 0) {
       setCounting(true)
       const id = 'video-timer'
       for (let s = timer; s > 0; s--) {
@@ -285,6 +294,7 @@ export function VideoControls({
             className="w-full px-0"
             variant={presetLabel === p.label ? 'default' : 'secondary'}
             onClick={() => setPresetLabel(p.label)}
+            disabled={recording || counting}
           >
             {p.label}
           </Button>
@@ -296,36 +306,41 @@ export function VideoControls({
           className="w-full"
           variant={presetLabel === matchFrame.label ? 'default' : 'secondary'}
           onClick={() => setPresetLabel(matchFrame.label)}
+          disabled={recording || counting}
         >
           {matchFrame.label}
         </Button>
       )}
       {presetSizeLabel && <p className="text-xs text-muted-foreground">{presetSizeLabel}</p>}
 
-      {/* カウントダウンタイマー */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground">Timer</Label>
-        <div className="grid grid-cols-4 gap-2">
-          {[0, 3, 5, 10].map((s) => (
-            <Button
-              key={s}
-              size="sm"
-              className="w-full px-0"
-              variant={timer === s ? 'default' : 'secondary'}
-              onClick={() => setTimer(s)}
-              disabled={recording || counting}
-            >
-              {s === 0 ? 'Off' : `${s}s`}
-            </Button>
-          ))}
+      {/* カウントダウンタイマー（Liveモードのみ。RenderはT=0から再始動するので不要）*/}
+      {mode === 'live' && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Timer</Label>
+          <div className="grid grid-cols-4 gap-2">
+            {[0, 3, 5, 10].map((s) => (
+              <Button
+                key={s}
+                size="sm"
+                className="w-full px-0"
+                variant={timer === s ? 'default' : 'secondary'}
+                onClick={() => setTimer(s)}
+                disabled={recording || counting}
+              >
+                {s === 0 ? 'Off' : `${s}s`}
+              </Button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {recording && mode === 'render' && (
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="size-2 animate-pulse rounded-full bg-red-500" />
-            Rendering… {progress ? `${progress.frame}/${progress.total}` : 'starting'}
+            {progress && progress.frame === progress.total
+              ? 'Finalizing…'
+              : `Rendering… ${progress ? `${progress.frame}/${progress.total}` : 'starting'}`}
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
             <div className="h-full bg-primary transition-[width]" style={{ width: `${progress ? (progress.frame / progress.total) * 100 : 0}%` }} />
@@ -342,7 +357,7 @@ export function VideoControls({
         className="w-full"
         variant={recording ? 'destructive' : 'default'}
         onClick={onToggle}
-        disabled={counting}
+        disabled={counting || (recording && mode === 'render' && progress?.frame === progress?.total)}
       >
         {recording ? <Square className="fill-current" /> : <Circle className="size-3 fill-current" />}
         {recording ? (mode === 'render' ? 'Cancel' : 'Stop') : counting ? 'Starting…' : 'Record'}
