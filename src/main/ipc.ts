@@ -15,8 +15,8 @@ import {
 } from './artworkView'
 import { captureStill, captureStillTo } from './capture'
 import { convertToMp4, saveWebmAs } from './ffmpeg'
-import { startFrameCapture, stopFrameCapture } from './frameRecorder'
-import { startRender, cancelRender } from './renderRecorder'
+import { startFrameCapture, stopFrameCapture, isFrameRecording } from './frameRecorder'
+import { startRender, cancelRender, isRendering } from './renderRecorder'
 import { getLastUrl, getPrefs, setPrefs } from './state'
 import { isVirtualRenderMode } from './renderState'
 import { checkForUpdate } from './updater'
@@ -34,15 +34,23 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
     setArtworkRect(args.rect)
   })
 
-  ipcMain.handle(IPC.captureStill, (_e, args: CaptureStillArgs) => captureStill(args))
-  ipcMain.handle(IPC.captureStillTo, (_e, args: CaptureStillToArgs) => captureStillTo(args))
+  // レンダリング中はviewのbounds/zoomを専有しているため、静止画撮影は受け付けない。
+  ipcMain.handle(IPC.captureStill, (_e, args: CaptureStillArgs) =>
+    isRendering() ? { ok: false, error: 'rendering in progress' } : captureStill(args)
+  )
+  ipcMain.handle(IPC.captureStillTo, (_e, args: CaptureStillToArgs) =>
+    isRendering() ? { ok: false, error: 'rendering in progress' } : captureStillTo(args)
+  )
   ipcMain.handle(IPC.chooseFolder, async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
     return canceled || !filePaths[0] ? null : filePaths[0]
   })
 
+  // Renderモードと録画は同時に使えない(viewの専有が衝突する)。
   ipcMain.handle(IPC.startFrameCapture, (_e, args: StartFrameCaptureArgs) =>
-    startFrameCapture(args.target, args.fps, args.includeCursor, args.format),
+    isRendering()
+      ? { ok: false, error: 'rendering in progress' }
+      : startFrameCapture(args.target, args.fps, args.includeCursor, args.format)
   )
   ipcMain.handle(IPC.stopFrameCapture, (_e, args: StopFrameCaptureArgs) =>
     stopFrameCapture(args.audio),
@@ -86,7 +94,10 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
     e.returnValue = isVirtualRenderMode()
   })
 
-  ipcMain.handle(IPC.startRender, (_e, args: StartRenderArgs) => startRender(args))
+  // 録画中はRenderモードを開始できない(viewの専有が衝突する)。
+  ipcMain.handle(IPC.startRender, (_e, args: StartRenderArgs) =>
+    isFrameRecording() ? { ok: false, error: 'recording in progress' } : startRender(args)
+  )
   ipcMain.on(IPC.cancelRender, () => cancelRender())
 
   // 動画クロップ用: ウィンドウ外枠とコンテンツ領域の差（≒タイトルバー高さ）。

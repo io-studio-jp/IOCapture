@@ -6,5 +6,7 @@ import { IPC } from '../shared/ipc-types'
 import { VIRTUAL_CLOCK_BOOTSTRAP } from '../shared/virtualClock'
 
 if (ipcRenderer.sendSync(IPC.renderIsVirtual) === true) {
-  webFrame.executeJavaScript(VIRTUAL_CLOCK_BOOTSTRAP).catch((e) => console.error('[artwork preload] virtual clock injection failed', e))
+  webFrame
+    .executeJavaScript(VIRTUAL_CLOCK_BOOTSTRAP)
+    .catch((e) => console.error('[artwork preload] virtual clock injection failed', e))
 }

@@ -93,8 +93,10 @@ const api = {
   onRenderProgress: (cb: (p: RenderProgress) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, p: RenderProgress): void => cb(p)
     ipcRenderer.on('render:progress', handler)
-    return (): void => { ipcRenderer.removeListener('render:progress', handler) }
-  },
+    return (): void => {
+      ipcRenderer.removeListener('render:progress', handler)
+    }
+  }
 }
 
 if (process.contextIsolated) {
