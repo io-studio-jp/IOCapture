@@ -12,6 +12,8 @@ let mainWin: BrowserWindow | null = null
 // 機能6: CSS非表示セレクタ
 let hideSelectors = ''
 let picking = false
+// Renderモード用: プレビュー固定状態フラグ。一度固定したらリロード後のt=0ブランクで上書きしない。
+let frozen = false
 
 // 作品ページのスクロールバーを隠す（スクロール自体は可能）。macOSのオーバーレイ
 // スクロールバーはレイアウト幅を取らないため、構図には影響しない。
@@ -232,8 +234,11 @@ const CAPTURE_SLIVER_PX = 2
 // プレビュー固定(フリーズ画像)の表示完了を待つ上限。レンダラーが応答しなくても撮影は続行する。
 const FREEZE_READY_TIMEOUT_MS = 300
 
-/** 直前の見た目をレンダラーに送り、フレーム位置へ固定表示されるのを待つ(撮影中の見た目の変化を隠す)。 */
+/** 直前の見た目をレンダラーに送り、フレーム位置へ固定表示されるのを待つ(撮影中の見た目の変化を隠す)。
+ * 既に固定済みの場合はスナップショットを撮り直さない(リロード後のt=0ブランクで上書きを防ぐ)。 */
 async function freezePreview(wc: Electron.WebContents): Promise<void> {
+  if (frozen) return
+  frozen = true
   if (!mainWin || mainWin.isDestroyed() || mainWin.webContents.isDestroyed()) return
   try {
     const snap = await wc.capturePage()
@@ -255,6 +260,7 @@ async function freezePreview(wc: Electron.WebContents): Promise<void> {
 }
 
 function unfreezePreview(): void {
+  frozen = false
   sendMain('capture:unfreeze', null)
 }
 
@@ -368,4 +374,17 @@ async function settleAfterDprChange(wc: Electron.WebContents): Promise<void> {
 
 export function getArtworkView(): WebContentsView | null {
   return view
+}
+
+export function getMainWindow(): BrowserWindow | null {
+  return mainWin
+}
+
+/** Renderモード用: 現在の見た目でプレビューを固定する(既に固定済みなら何もしない)。 */
+export async function freezeArtworkPreview(): Promise<void> {
+  if (view) await freezePreview(view.webContents)
+}
+
+export function unfreezeArtworkPreview(): void {
+  unfreezePreview()
 }

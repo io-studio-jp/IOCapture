@@ -7,6 +7,8 @@ import type {
   SaveBlobArgs, SaveBlobResult,
   StartFrameCaptureResult,
   StopFrameCaptureResult,
+  StartRenderArgs,
+  RenderProgress,
   Prefs,
   UpdateInfo,
 } from '../shared/ipc-types'
@@ -85,6 +87,14 @@ const api = {
     return (): void => { ipcRenderer.removeListener('capture:unfreeze', handler) }
   },
   captureFreezeReady: () => ipcRenderer.send('capture:freezeReady'),
+  startRender: (args: StartRenderArgs): Promise<StopFrameCaptureResult> =>
+    ipcRenderer.invoke(IPC.startRender, args),
+  cancelRender: () => ipcRenderer.send(IPC.cancelRender),
+  onRenderProgress: (cb: (p: RenderProgress) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, p: RenderProgress): void => cb(p)
+    ipcRenderer.on('render:progress', handler)
+    return (): void => { ipcRenderer.removeListener('render:progress', handler) }
+  },
 }
 
 if (process.contextIsolated) {

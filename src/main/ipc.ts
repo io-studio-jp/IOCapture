@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow, dialog, shell } from 'electron'
 import { writeFile } from 'fs/promises'
 import { IPC } from '../shared/ipc-types'
-import type { LoadUrlArgs, SetFrameRectArgs, CaptureStillArgs, CaptureStillToArgs, ConvertToMp4Args, SaveBlobArgs } from '../shared/ipc-types'
+import type { LoadUrlArgs, SetFrameRectArgs, CaptureStillArgs, CaptureStillToArgs, ConvertToMp4Args, SaveBlobArgs, StartRenderArgs } from '../shared/ipc-types'
 import type { Prefs } from '../shared/ipc-types'
 import {
   loadArtworkUrl,
@@ -16,6 +16,7 @@ import {
 import { captureStill, captureStillTo } from './capture'
 import { convertToMp4, saveWebmAs } from './ffmpeg'
 import { startFrameCapture, stopFrameCapture } from './frameRecorder'
+import { startRender, cancelRender } from './renderRecorder'
 import { getLastUrl, getPrefs, setPrefs } from './state'
 import { isVirtualRenderMode } from './renderState'
 import { checkForUpdate } from './updater'
@@ -81,9 +82,12 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
   ipcMain.handle(IPC.checkUpdate, () => checkForUpdate())
 
   // 作品preloadがRenderモード(仮想時計)かを同期で問い合わせる
-  ipcMain.on('render:isVirtual', (e) => {
+  ipcMain.on(IPC.renderIsVirtual, (e) => {
     e.returnValue = isVirtualRenderMode()
   })
+
+  ipcMain.handle(IPC.startRender, (_e, args: StartRenderArgs) => startRender(args))
+  ipcMain.on(IPC.cancelRender, () => cancelRender())
 
   // 動画クロップ用: ウィンドウ外枠とコンテンツ領域の差（≒タイトルバー高さ）。
   // desktopCapturerはタイトルバー込みでウィンドウを撮るため、この分だけ原点をずらす。

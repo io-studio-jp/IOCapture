@@ -28,6 +28,9 @@ export const IPC = {
   revealFile: 'file:reveal',
   openExternal: 'shell:openExternal',
   checkUpdate: 'app:checkUpdate',
+  startRender: 'video:startRender',
+  cancelRender: 'video:cancelRender',
+  renderIsVirtual: 'render:isVirtual',
 } as const
 
 export type UpdateInfo = { update: boolean; version?: string; url?: string }
@@ -62,6 +65,14 @@ export type StopFrameCaptureArgs = { audio: ArrayBuffer | null }
 export type StopFrameCaptureResult =
   | { ok: true; mp4Path: string }
   | { ok: false; canceled?: boolean; error?: string }
+
+export type StartRenderArgs = {
+  target: TargetSize
+  fps: number
+  durationSec: number
+  format: VideoFormat
+}
+export type RenderProgress = { frame: number; total: number }
 
 // 機能3: プリセット記憶の型
 export type Prefs = {
