@@ -258,6 +258,9 @@ export type CaptureSurfaceHandle = {
   release: () => Promise<void>
 }
 
+// 拡大サーフェスはviewのbounds/zoomを専有するため、同時に1つしか保持できない。
+let surfaceHeld = false
+
 /**
  * 撮影サーフェスを確保する。targetが表示以下ならnative(何もしない)。
  * 超えるなら、フリーズ画像を表示→viewを左端2pxスリバーを残して画面外で拡大
@@ -284,34 +287,46 @@ export async function acquireCaptureSurface(target: TargetSize): Promise<Capture
   const plan = planCaptureSurface(target, prevBounds.width, sf)
   if (plan.kind === 'native') return { expected: null, release: async () => {} }
 
+  if (surfaceHeld) throw new Error('capture surface already in use')
+  surfaceHeld = true
+
+  // 元へ戻す共通処理。ウィンドウを閉じて開き直した後でも安全なように、
+  // 確保時のwebContentsが現在のviewのものか確認してから触る。
+  const restore = async (): Promise<void> => {
+    surfaceHeld = false
+    if (!view || view.webContents !== wc || wc.isDestroyed()) return
+    wc.setZoomFactor(prevZoom)
+    view.setBounds(prevBounds)
+    // 表示を元へ戻すため、作品にもう一度再レイアウトを促す。
+    wc.executeJavaScript(`window.dispatchEvent(new Event('resize'))`).catch(() => {})
+    // 元のサイズでの再描画が画面に乗るまで少し待ってからフリーズ画像を外す。
+    await new Promise((r) => setTimeout(r, 120))
+    unfreezePreview()
+  }
+
   await freezePreview(wc)
-  view.setBounds({
-    x: CAPTURE_SLIVER_PX - plan.bounds.width,
-    y: prevBounds.y,
-    ...plan.bounds,
-  })
   try {
+    view.setBounds({
+      x: CAPTURE_SLIVER_PX - plan.bounds.width,
+      y: prevBounds.y,
+      ...plan.bounds,
+    })
     wc.setZoomFactor(plan.zoomFactor)
     // サイズ・DPRを変えただけでは多くの作品はcanvasを描き直さない。
     // resizeイベントを送って作品自身に高解像度バッファで再描画させ、数フレーム安定を待つ。
     await settleAfterDprChange(wc)
   } catch (err) {
-    wc.setZoomFactor(prevZoom)
-    view.setBounds(prevBounds)
-    unfreezePreview()
+    // 確保に失敗したら元へ戻す。restore自体の失敗で元のエラーを隠さない。
+    await restore().catch(() => {})
     throw err
   }
+  let released = false
   return {
     expected: plan.expected,
     release: async () => {
-      if (!view) return
-      wc.setZoomFactor(prevZoom)
-      view.setBounds(prevBounds)
-      // 表示を元へ戻すため、作品にもう一度再レイアウトを促す。
-      wc.executeJavaScript(`window.dispatchEvent(new Event('resize'))`).catch(() => {})
-      // 元のサイズでの再描画が画面に乗るまで少し待ってからフリーズ画像を外す。
-      await new Promise((r) => setTimeout(r, 120))
-      unfreezePreview()
+      if (released) return
+      released = true
+      await restore()
     }
   }
 }
