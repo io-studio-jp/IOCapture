@@ -34,11 +34,24 @@ export type UpdateInfo = { update: boolean; version?: string; url?: string }
 
 export type LoadUrlArgs = { url: string }
 export type SetFrameRectArgs = { rect: Rect }
-export type CaptureStillArgs = { target: TargetSize; transparent: boolean }
+export type CaptureStillArgs = {
+  target: TargetSize
+  transparent: boolean
+  /** SSAA: 2倍で描画して縮小(ジャギー低減) */
+  supersample?: boolean
+  /** 印刷向けDPI(cm/dpi指定時)。PNGのpHYsチャンクに埋め込む */
+  dpi?: number
+}
 export type CaptureStillResult =
   | { ok: true; savedPath: string; width: number; height: number }
   | { ok: false; error: string }
-export type CaptureStillToArgs = { target: TargetSize; dir: string; name: string }
+export type CaptureStillToArgs = {
+  target: TargetSize
+  dir: string
+  name: string
+  supersample?: boolean
+  dpi?: number
+}
 export type ConvertToMp4Args = { webmPath: string }
 export type ConvertToMp4Result = { ok: true; mp4Path: string } | { ok: false; error: string }
 export type SaveBlobArgs = { data: ArrayBuffer; defaultName: string }
@@ -53,6 +66,10 @@ export type StartRenderArgs = {
   fps: number
   durationSec: number
   format: VideoFormat
+  /** モーションブラーのサブフレーム数(1=Off, 2/4/8) */
+  blurSamples: number
+  /** SSAA: 2倍で描画して縮小(ジャギー低減) */
+  supersample: boolean
 }
 export type RenderProgress = { frame: number; total: number }
 
@@ -76,6 +93,11 @@ export type Prefs = {
   captureMode?: 'live' | 'render'
   // Renderモードの録画秒数
   renderLengthSec?: number
+  // Renderのモーションブラーサブフレーム数(1=Off, 2/4/8)
+  renderBlurSamples?: number
+  // SSAA(2倍描画→縮小)の有効/無効
+  renderSupersample?: boolean
+  stillSupersample?: boolean
   outputDir?: string
   intervalCount?: number
   intervalSec?: number

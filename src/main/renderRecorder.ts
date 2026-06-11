@@ -12,12 +12,16 @@ import {
   freezeArtworkPreview,
   unfreezeArtworkPreview
 } from './artworkView'
+import { planSupersample } from '../shared/supersample'
+import { sumInto, averageToBuffer } from '../shared/frameBlend'
 import type { StartRenderArgs, RenderResult, RenderProgress } from '../shared/ipc-types'
 
 const ffmpegPath = ffmpegStatic ? ffmpegStatic.replace('app.asar', 'app.asar.unpacked') : null
 
 // 1フレームのstep+描画にかけてよい上限。超えたら作品の暴走とみなして中断する。
 const STEP_TIMEOUT_MS = 5000
+// モーションブラーのシャッター角(180°=フレーム間隔の前半だけ露光する映画の標準)。
+const SHUTTER = 0.5
 
 let active = false
 let cancelRequested = false
@@ -60,6 +64,8 @@ const round2 = (n: number): number => Math.max(2, Math.round(n / 2) * 2)
 
 export async function startRender(args: StartRenderArgs): Promise<RenderResult> {
   const { target, fps, durationSec, format } = args
+  // モーションブラーのサブフレーム数(1=Off)。不正値は1に丸める
+  const samples = Number.isFinite(args.blurSamples) ? Math.max(1, Math.floor(args.blurSamples)) : 1
 
   const view = getArtworkView()
   if (!view) return { ok: false, error: 'artwork view not ready' }
@@ -90,7 +96,8 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
     await engageVirtualClock(view.webContents)
 
     // 3. キャプチャサーフェスを確保(内部のfreezeはfrozenフラグで既にスキップされる)。
-    surface = await acquireCaptureSurface(size)
+    // SSAA時は2倍で描画し、各フレームをsizeへ高品質縮小する。
+    surface = await acquireCaptureSurface(planSupersample(size, args.supersample === true))
 
     // 4. 一時ディレクトリとffmpegプロセスを準備する。
     const ext = format === 'webp' ? 'webp' : 'mp4'
@@ -113,10 +120,14 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
       '-an'
     ]
     // オフラインなので品質優先のエンコード設定。
+    // mp4はRGB→YUVの変換行列をBT.709に明示し、色空間タグも付ける(プレイヤー間の色ズレ防止。
+    // 明示しないとffmpegがBT.601系を選ぶことがあり、HD再生で彩度がわずかにずれる)。
     const encodeArgs: string[] =
       format === 'webp'
         ? ['-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '1', '-compression_level', '4']
         : [
+            '-vf',
+            'scale=in_range=full:out_range=tv:out_color_matrix=bt709',
             '-c:v',
             'libx264',
             '-pix_fmt',
@@ -125,6 +136,14 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
             'medium',
             '-crf',
             '15',
+            '-colorspace',
+            'bt709',
+            '-color_primaries',
+            'bt709',
+            '-color_trc',
+            'bt709',
+            '-color_range',
+            'tv',
             '-movflags',
             '+faststart',
             '-r',
@@ -150,20 +169,18 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
     // ffmpegがフレームを受け取れなくなった等、キャンセル以外の早期離脱の理由。
     let aborted: string | null = null
 
-    // 5. フレームループ: 仮想時計を1フレームずつ進めて撮影する。
-    for (let i = 0; i < total; i++) {
-      if (cancelRequested) break
-
-      // step()は1フレーム進んで実際の描画が完了したら解決するPromise。
+    // step()は仮想時刻をms進め、実際の描画が完了したら解決する(暴走はタイムアウトで中断)。
+    const stepVirtual = async (ms: number, frameIndex: number): Promise<void> => {
       const stepped = await Promise.race<boolean>([
-        wc.executeJavaScript(`window.__iocapRender.step(${1000 / fps})`).then(() => true),
+        wc.executeJavaScript(`window.__iocapRender.step(${ms})`).then(() => true),
         new Promise<boolean>((r) => setTimeout(() => r(false), STEP_TIMEOUT_MS))
       ])
-      if (!stepped) {
-        throw new Error(`frame ${i}: step timed out (artwork not responding)`)
-      }
+      if (!stepped) throw new Error(`frame ${frameIndex}: step timed out (artwork not responding)`)
+    }
 
-      // capturePage → サイズ不一致時は高品質リサイズ → stride再パック → ffmpegへ書き込み。
+    // capturePage → サイズ不一致時は高品質リサイズ → stride再パックでタイトなBGRAを返す。
+    // SSAA時はここでの縮小がアンチエイリアスになる(平均と縮小は線形なのでブラーとの順序は等価)。
+    const captureTightFrame = async (): Promise<Buffer> => {
       const image = await wc.capturePage()
       const ps = image.getSize()
       const frame =
@@ -171,15 +188,38 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
           ? image.resize({ width: size.width, height: size.height, quality: 'best' })
           : image
       const raw = frame.toBitmap()
-      // toBitmapは行にストライドパディングが入ることがある。ffmpegは幅×4でタイトに読むので詰め直す。
-      let buf: Buffer = raw
-      if (raw.length !== expected) {
-        const stride = Math.floor(raw.length / size.height)
-        const tight = Buffer.allocUnsafe(expected)
-        for (let y = 0; y < size.height; y++) {
-          raw.copy(tight, y * rowBytes, y * stride, y * stride + rowBytes)
+      if (raw.length === expected) return raw
+      const stride = Math.floor(raw.length / size.height)
+      const tight = Buffer.allocUnsafe(expected)
+      for (let y = 0; y < size.height; y++) {
+        raw.copy(tight, y * rowBytes, y * stride, y * stride + rowBytes)
+      }
+      return tight
+    }
+
+    // モーションブラー用のアキュムレータ(毎フレームの確保を避けるため使い回す)。
+    const acc = samples > 1 ? new Uint32Array(expected) : null
+
+    const frameMs = 1000 / fps
+
+    // 5. フレームループ: 仮想時計を1フレームずつ進めて撮影する。
+    for (let i = 0; i < total; i++) {
+      if (cancelRequested) break
+
+      let buf: Buffer
+      if (acc) {
+        // モーションブラー: シャッター開(フレーム前半)をsamples分割して撮影・加算し、
+        // シャッター閉(後半)は時間だけ進める。平均が1フレームになる。
+        acc.fill(0)
+        for (let s = 0; s < samples; s++) {
+          await stepVirtual((frameMs * SHUTTER) / samples, i)
+          sumInto(acc, await captureTightFrame())
         }
-        buf = tight
+        await stepVirtual(frameMs * (1 - SHUTTER), i)
+        buf = averageToBuffer(acc, samples)
+      } else {
+        await stepVirtual(frameMs, i)
+        buf = await captureTightFrame()
       }
 
       if (!proc.stdin.writable) {

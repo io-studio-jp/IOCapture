@@ -111,9 +111,17 @@ export async function startRenderRecording(
   target: TargetSize,
   durationSec: number,
   format: 'mp4' | 'webp' = 'mp4',
+  opts: { blurSamples?: number; supersample?: boolean } = {},
   fps = 60,
 ): Promise<RecordResult> {
-  const res = await window.capture.startRender({ target, fps, durationSec, format })
+  const res = await window.capture.startRender({
+    target,
+    fps,
+    durationSec,
+    format,
+    blurSamples: opts.blurSamples ?? 1,
+    supersample: opts.supersample ?? false,
+  })
   if (res.ok) return { mp4Path: res.mp4Path }
   return { canceled: res.canceled, error: res.error }
 }

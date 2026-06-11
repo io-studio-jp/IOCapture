@@ -59,11 +59,16 @@ export function annotatePng(png: Buffer, opts: AnnotatePngOptions = {}): Buffer 
   if (!hasChunk(png, 'sRGB')) {
     inserts.push(buildChunk('sRGB', Buffer.from([0]))) // rendering intent: perceptual
     // sRGB非対応デコーダ向けの互換ガンマ(1/2.2 → 45455/100000)
-    inserts.push(buildChunk('gAMA', (() => {
-      const b = Buffer.alloc(4)
-      b.writeUInt32BE(45455)
-      return b
-    })()))
+    inserts.push(
+      buildChunk(
+        'gAMA',
+        (() => {
+          const b = Buffer.alloc(4)
+          b.writeUInt32BE(45455)
+          return b
+        })()
+      )
+    )
   }
   if (opts.dpi && opts.dpi > 0 && !hasChunk(png, 'pHYs')) {
     const ppm = Math.round(opts.dpi / 0.0254)

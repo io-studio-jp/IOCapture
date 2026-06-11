@@ -57,6 +57,18 @@ export function VideoControls({
     setLengthSecState(v)
     window.capture.setPrefs({ renderLengthSec: v })
   }
+  // モーションブラーのサブフレーム数(1=Off)
+  const [blurSamples, setBlurSamplesState] = useState(() => window.capture.getPrefs().renderBlurSamples ?? 1)
+  const setBlurSamples = (v: number): void => {
+    setBlurSamplesState(v)
+    window.capture.setPrefs({ renderBlurSamples: v })
+  }
+  // SSAA(2倍描画→縮小)
+  const [supersample, setSupersampleState] = useState(() => window.capture.getPrefs().renderSupersample ?? false)
+  const setSupersample = (v: boolean): void => {
+    setSupersampleState(v)
+    window.capture.setPrefs({ renderSupersample: v })
+  }
   // Render進捗(録画中のみ)
   const [progress, setProgress] = useState<{ frame: number; total: number } | null>(null)
   useEffect(() => window.capture.onRenderProgress((p) => setProgress(p)), [])
@@ -130,7 +142,7 @@ export function VideoControls({
         setRecording(true)
         startingRef.current = false // RenderはsetRecording(true)で以降onToggleがCancelに分岐する
         setProgress(null)
-        const res = await startRenderRecording(target, lengthSec, format)
+        const res = await startRenderRecording(target, lengthSec, format, { blurSamples, supersample })
         setRecording(false)
         setProgress(null)
         if ('mp4Path' in res) {
@@ -288,6 +300,19 @@ export function VideoControls({
             ))}
           </div>
           <Input type="number" min={1} value={lengthSec} onChange={(e) => setLengthSec(Math.max(1, +e.target.value))} disabled={recording || counting} />
+          {/* モーションブラー: シャッター180°のサブフレーム合成。レンダリング時間は約N倍 */}
+          <Label className="text-xs text-muted-foreground">Motion blur</Label>
+          <div className="grid grid-cols-4 gap-2">
+            {[1, 2, 4, 8].map((n) => (
+              <Button key={n} size="sm" className="w-full px-0" variant={blurSamples === n ? 'default' : 'secondary'} onClick={() => setBlurSamples(n)} disabled={recording || counting}>
+                {n === 1 ? 'Off' : `${n}x`}
+              </Button>
+            ))}
+          </div>
+          {/* SSAA: 2倍で描画して縮小(エッジが滑らかに)。レンダリング時間増 */}
+          <Button size="sm" className="w-full" variant={supersample ? 'default' : 'secondary'} onClick={() => setSupersample(!supersample)} disabled={recording || counting}>
+            {supersample ? 'Supersample 2x: on' : 'Supersample 2x: off'}
+          </Button>
         </div>
       )}
       <div className="grid grid-cols-3 gap-2">

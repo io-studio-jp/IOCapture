@@ -55,7 +55,8 @@ export async function saveWebmAs(
     const args =
       format === 'webp'
         ? ['-y', '-i', webmPath, '-an', '-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '1', '-compression_level', '6', outPath]
-        : ['-y', '-i', webmPath, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', outPath]
+        : // 色空間タグ(BT.709)を明示してプレイヤー間の色ズレを防ぐ(入力は既にYUVなので行列変換はしない)
+          ['-y', '-i', webmPath, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', outPath]
     await run(ffmpegPath, args)
     const { canceled, filePath } = await dialog.showSaveDialog({
       defaultPath: `capture-${Date.now()}.${ext}`,

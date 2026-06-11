@@ -21,6 +21,12 @@ export function StillControls({
   const [longEdge, setLongEdgeState] = useState(() => window.capture.getPrefs().longEdge ?? 3000)
   const [widthCm, setWidthCmState] = useState(() => window.capture.getPrefs().widthCm ?? 10)
   const [dpi, setDpiState] = useState(() => window.capture.getPrefs().dpi ?? 300)
+  // SSAA(2倍描画→縮小)。ジャギーの少ない静止画になる
+  const [supersample, setSupersampleState] = useState(() => window.capture.getPrefs().stillSupersample ?? false)
+  const setSupersample = (v: boolean): void => {
+    setSupersampleState(v)
+    window.capture.setPrefs({ stillSupersample: v })
+  }
   // セルフタイマー（秒）。0でオフ。
   const [timer, setTimerState] = useState(() => window.capture.getPrefs().stillTimer ?? 0)
   const setTimer = (v: number): void => {
@@ -83,7 +89,13 @@ export function StillControls({
         : targetFromWidthCm(aspect, widthCm, dpi)
     const { ok, size } = capToGpuLimit(raw)
     if (!ok) toast.warning(`Reduced to ${size.width}×${size.height}px due to GPU limit`)
-    const res = await window.capture.captureStill({ target: size, transparent: true })
+    const res = await window.capture.captureStill({
+      target: size,
+      transparent: true,
+      supersample,
+      // cm/dpi指定時はPNGに実寸DPI(pHYs)を埋め込む
+      dpi: mode === 'cm' ? dpi : undefined
+    })
     if (res.ok)
       toast.success(`Saved ${res.width}×${res.height}px`, {
         description: res.savedPath.split('/').pop(),
@@ -123,7 +135,7 @@ export function StillControls({
     let saved = 0
     for (let i = 1; i <= intervalCount && runningRef.current; i++) {
       const name = `capture-${base}-${String(i).padStart(3, '0')}.png`
-      const res = await window.capture.captureStillTo({ target, dir, name })
+      const res = await window.capture.captureStillTo({ target, dir, name, supersample, dpi: mode === 'cm' ? dpi : undefined })
       if (res.ok) saved++
       toast.message(`Shot ${i}/${intervalCount}`, { id: 'interval' })
       // 次の撮影まで待機（停止に素早く反応するよう小刻みにチェック）。
@@ -185,6 +197,10 @@ export function StillControls({
         }
         return null
       })()}
+      {/* SSAA: 2倍で描画して縮小(エッジが滑らかに) */}
+      <Button size="sm" className="w-full" variant={supersample ? 'default' : 'secondary'} onClick={() => setSupersample(!supersample)} disabled={running}>
+        {supersample ? 'Supersample 2x: on' : 'Supersample 2x: off'}
+      </Button>
       {/* セルフタイマー */}
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Timer</Label>
