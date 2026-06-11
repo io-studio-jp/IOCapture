@@ -12,7 +12,7 @@ let mainWin: BrowserWindow | null = null
 // 機能6: CSS非表示セレクタ
 let hideSelectors = ''
 let picking = false
-// Renderモード用: プレビュー固定状態フラグ。一度固定したらリロード後のt=0ブランクで上書きしない。
+// Renderモード用: プレビュー固定状態フラグ。一度固定したら以後のfreezeでは上書きしない。
 let frozen = false
 
 // 作品ページのスクロールバーを隠す（スクロール自体は可能）。macOSのオーバーレイ
@@ -51,7 +51,7 @@ export function ensureArtworkView(win: BrowserWindow): WebContentsView {
   if (view) return view
   view = new WebContentsView({
     webPreferences: {
-      // Renderモード時に仮想時計を注入する専用preload
+      // 常時パススルー型の時計シムを注入する専用preload(Renderモードはengage()で仮想化)
       preload: join(__dirname, '../preload/artwork.js'),
     },
   })
@@ -235,7 +235,7 @@ const CAPTURE_SLIVER_PX = 2
 const FREEZE_READY_TIMEOUT_MS = 300
 
 /** 直前の見た目をレンダラーに送り、フレーム位置へ固定表示されるのを待つ(撮影中の見た目の変化を隠す)。
- * 既に固定済みの場合はスナップショットを撮り直さない(リロード後のt=0ブランクで上書きを防ぐ)。 */
+ * 既に固定済みの場合はスナップショットを撮り直さない(二重freezeでの上書きを防ぐ)。 */
 async function freezePreview(wc: Electron.WebContents): Promise<void> {
   if (frozen) return
   frozen = true
@@ -366,7 +366,7 @@ async function settleAfterDprChange(wc: Electron.WebContents): Promise<void> {
           window.dispatchEvent(new Event('resize'));
           // Renderモード(仮想時計)ではrAFはstep()まで発火しないため即解決する
           // (高DPRでの再描画はレンダリングループのstepが駆動する)。
-          if (window.__iocapRender) { res(true); return; }
+          if (window.__iocapRender && window.__iocapRender.engaged()) { res(true); return; }
           let n = 0;
           const tick = () => (++n < 6 ? requestAnimationFrame(tick) : res(true));
           requestAnimationFrame(tick);

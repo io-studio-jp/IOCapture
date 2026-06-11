@@ -231,7 +231,7 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
       proc.stdin.destroy()
       proc.kill()
     }
-    // 準備中(リロード待ち等)にキャンセルされた場合はエラーではなくキャンセル扱いにする。
+    // 準備中にキャンセルされた場合はエラーではなくキャンセル扱いにする。
     if (cancelRequested) return { ok: false, canceled: true }
     return { ok: false, error: String(e) }
   } finally {

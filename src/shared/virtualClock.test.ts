@@ -281,3 +281,91 @@ test('VIRTUAL_CLOCK_BOOTSTRAP is self-contained and engage/disengage work', asyn
   render.disengage()
   expect(render.engaged()).toBe(false)
 })
+
+// ---- engage/disengage境界のキュー移譲 ----
+
+test('disengage migrates queued virtual rAF to the real rAF (animation resumes)', async () => {
+  const d = makeDeps()
+  // 遅延型realRafで「実側に登録されたか」を観測する
+  const pending: ((t: number) => void)[] = []
+  const deps = { ...d.deps, realRaf: (cb: (t: number) => void): number => (pending.push(cb), 900) }
+  const c = createVirtualClock(deps)
+  c.engage()
+  let fired = 0
+  const loop = (): void => {
+    fired++
+    c.requestAnimationFrame(loop)
+  }
+  c.requestAnimationFrame(loop)
+  // 実フレームを有限回だけ進める(移譲後のループは再登録し続けるため無限に回さない)
+  const drain = (frames: number): void => {
+    for (let i = 0; i < frames && pending.length > 0; i++) pending.shift()!(0)
+  }
+  const p = c.step(16)
+  drain(4) // stepの描画待ち(ダブルrAF)
+  await p
+  expect(fired).toBe(1)
+  c.disengage()
+  // 仮想キューに残っていた再登録分が実rAFへ移譲され、実フレームで動き出す
+  drain(3)
+  expect(fired).toBeGreaterThanOrEqual(2)
+})
+
+test('disengage migrates pending virtual timers to real timers with remaining delay', async () => {
+  const d = makeDeps()
+  const c = createVirtualClock(d.deps)
+  c.engage()
+  let fired = false
+  c.setTimeout(() => (fired = true), 100)
+  await c.step(40) // 残り60ms
+  c.disengage()
+  const entry = d.st.find((e) => e.ms === 60)
+  expect(entry).toBeTruthy()
+  entry!.cb()
+  expect(fired).toBe(true)
+})
+
+test('engage migrates pending passthrough rAF into the virtual queue (monotonic stamps)', async () => {
+  const d = makeDeps()
+  // キャンセルを反映する遅延型realRafスタブ(本物のcancelAnimationFrame相当)
+  const rafs = new Map<number, (t: number) => void>()
+  let rafId = 700
+  const deps = {
+    ...d.deps,
+    realRaf: (cb: (t: number) => void): number => {
+      rafs.set(rafId, cb)
+      return rafId++
+    },
+    realCancelRaf: (id: number): void => {
+      rafs.delete(id)
+      d.cleared.push('raf:' + id)
+    }
+  }
+  const c = createVirtualClock(deps)
+  d.setPerfNow(1000)
+  let stamp = -1
+  c.requestAnimationFrame((t) => (stamp = t)) // パススルーで実側に登録される
+  c.engage()
+  // 実側の登録はキャンセルされ(realCancelRaf)、仮想キューへ移る
+  expect(d.cleared).toContain('raf:700')
+  const p = c.step(16)
+  // 描画待ちを進める(キャンセル済みのものは発火しない)
+  for (let i = 0; i < 4; i++) {
+    const fire = Array.from(rafs.entries())
+    rafs.clear()
+    for (const [, cb] of fire) cb(0)
+  }
+  await p
+  expect(stamp).toBe(1016) // 実時刻ではなく仮想タイムスタンプで発火
+})
+
+test('clearTimeout on a rAF id does not break later cancelAnimationFrame', () => {
+  const d = makeDeps()
+  let rafId = 0
+  const deps = { ...d.deps, realRaf: (): number => (rafId = 800) }
+  const c = createVirtualClock(deps)
+  const id = c.requestAnimationFrame(() => {})
+  c.clearTimeout(id) // ブラウザ同様、rAFはタイマーのclearでは消えない
+  c.cancelAnimationFrame(id)
+  expect(d.cleared).toContain('raf:' + rafId)
+})

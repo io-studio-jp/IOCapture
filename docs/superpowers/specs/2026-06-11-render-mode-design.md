@@ -73,8 +73,8 @@ timecut/timeweb で実績のある方式。
 
 ```
 startRender(target, fps=60, durationSec, format):
-  フラグON → reload → 仮想時計の準備完了を待つ
-  フリーズ画像表示 + withCaptureSurfaceの拡大サーフェス適用(録画中保持)
+  フリーズ画像表示 → __iocapRender.engage()(リロード無しでその場から仮想化)
+  withCaptureSurfaceの拡大サーフェス適用(録画中保持)
   ffmpeg起動(CFR): -f rawvideo -r 60 -i pipe:0 → libx264 -preset medium -crf 15
                     (webp時: libwebp_anim lossless)
   for i in 0..durationSec*fps:
@@ -82,7 +82,7 @@ startRender(target, fps=60, durationSec, format):
     capturePage → toBitmap → stride詰め → stdin書き込み(バックプレッシャー待ち)
     進捗をレンダラーへ送信(フレームi/N, 経過時間)
   stdin閉じ → mux不要(音なし) → 保存ダイアログ
-  finally: サーフェス復元 → フラグOFF → reload → フリーズ解除
+  finally: __iocapRender.disengage()(実時間へ復帰) → サーフェス復元 → フリーズ解除
 ```
 
 - タイムスタンプは固定60fps（wallclock不使用）。**描画がどれだけ遅くても完成品は60fps**
@@ -113,7 +113,7 @@ startRender(target, fps=60, durationSec, format):
 
 ## エラーハンドリング
 
-- 仮想時計の準備失敗（preload不達・reload失敗）: エラートーストで中断、通常状態へ復帰
+- 時計シムの準備失敗（preload不達）: エラートーストで中断、通常状態へ復帰
 - `step()` がタイムアウト（作品が無限ループ等）: 1フレーム最大5秒でタイムアウトしたら
   録画を中断し、エラートーストで知らせる（部分的な動画は保存しない）
 - ffmpeg異常終了: 中断・後始末・エラートースト

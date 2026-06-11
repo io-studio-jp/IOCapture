@@ -189,7 +189,7 @@ export function VideoControls({
       return
     }
     if (counting) return
-    // カウントダウンはLiveモードのみ（Renderはt=0から再始動するのでタイマー不要）
+    // カウントダウンはLiveモードのみ（Renderは事前指定の長さを今この瞬間から録る）
     if (mode === 'live' && timer > 0) {
       setCounting(true)
       const id = 'video-timer'
@@ -215,7 +215,7 @@ export function VideoControls({
   })()
 
   // Render最終フレーム到達後のffmpeg書き出し中(キャンセル不可)。
-  // progressがnull(準備中=リロード/サーフェス確保など)はfinalizingではない点に注意。
+  // progressがnull(準備中=シム切替/サーフェス確保など)はfinalizingではない点に注意。
   const finalizing = progress !== null && progress.frame === progress.total
 
   return (

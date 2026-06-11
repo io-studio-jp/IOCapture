@@ -60,8 +60,12 @@ export function createVirtualClock(deps: VirtualClockDeps): {
   }
   const timers: Timer[] = []
   let rafQueue: { id: number; cb: (t: number) => number | void }[] = []
-  /** パススルー時に実APIへ委譲した登録の対応表(own id → 実id)。両モードでclearを機能させる */
-  const realMap = new Map<number, { type: 't' | 'i' | 'raf'; realId: number }>()
+  /** パススルー時に実APIへ委譲した登録の対応表(own id → 実id)。両モードでclearを機能させる。
+   *  rAFはengage時に仮想キューへ移譲するためcbも保持する */
+  const realMap = new Map<
+    number,
+    { type: 't' | 'i' | 'raf'; realId: number; cb?: (t: number) => void }
+  >()
 
   // ブラウザ同様、NaN/非有限の遅延は0msとして扱う
   const coerceDelay = (ms: unknown): number =>
@@ -96,10 +100,11 @@ export function createVirtualClock(deps: VirtualClockDeps): {
   const clearTimer = (id: number): void => {
     const real = realMap.get(id)
     if (real) {
+      // type 'raf' はタイマーのclearでは消さない(ブラウザ挙動に合わせる)。対応表も保持する
+      if (real.type === 'raf') return
       realMap.delete(id)
       if (real.type === 't') deps.realClearTimeout(real.realId)
-      else if (real.type === 'i') deps.realClearInterval(real.realId)
-      // type 'raf' はタイマーのclearでは消さない(ブラウザ挙動に合わせる)
+      else deps.realClearInterval(real.realId)
       return
     }
     removeVirtualTimer(id)
@@ -113,10 +118,41 @@ export function createVirtualClock(deps: VirtualClockDeps): {
       // 仮想時刻が実時刻と連続になるように起点を合わせる(elapsedはengageを跨いで累積)
       base = deps.realPerfNow() - elapsed
       dateBase = deps.realDateNow() - elapsed
+      // パススルーで実rAFへ委譲済みの登録は、engage後に実時刻のタイムスタンプで発火して
+      // 単調性が崩れるため、実側をキャンセルして仮想キューへ移す(フレーム0から決定的になる)
+      for (const [id, real] of Array.from(realMap)) {
+        if (real.type !== 'raf' || !real.cb) continue
+        deps.realCancelRaf(real.realId)
+        realMap.delete(id)
+        rafQueue.push({ id, cb: real.cb })
+      }
     },
     disengage: () => {
-      // 仮想キューは破棄せず保持する(再engageで続きから動く)。now()は実時刻へ戻る
+      if (!isEngaged) return
       isEngaged = false
+      // 仮想キューに残った登録を実APIへ移譲する。これが無いと、録画の最終フレームで
+      // 再登録されたrAFループが二度と発火せず、録画後に作品のアニメーションが止まる
+      const q = rafQueue
+      rafQueue = []
+      for (const r of q) {
+        const realId = deps.realRaf(r.cb)
+        realMap.set(r.id, { type: 'raf', realId, cb: r.cb })
+      }
+      const pendingTimers = timers.splice(0)
+      for (const t of pendingTimers) {
+        if (t.every != null) {
+          // インターバルは周期を保って実側へ(初回発火までの端数は周期で近似)
+          const realId = deps.realSetInterval(() => t.cb(...t.args), t.every)
+          realMap.set(t.id, { type: 'i', realId })
+        } else {
+          const remaining = Math.max(0, t.due - elapsed)
+          const realId = deps.realSetTimeout(() => {
+            realMap.delete(t.id)
+            t.cb(...t.args)
+          }, remaining)
+          realMap.set(t.id, { type: 't', realId })
+        }
+      }
     },
     now: () => (isEngaged ? base + elapsed : deps.realPerfNow()),
     dateNow: () => (isEngaged ? dateBase + elapsed : deps.realDateNow()),
@@ -150,7 +186,7 @@ export function createVirtualClock(deps: VirtualClockDeps): {
           realMap.delete(id)
           cb(t)
         })
-        realMap.set(id, { type: 'raf', realId })
+        realMap.set(id, { type: 'raf', realId, cb })
         return id
       }
       const id = nextId++
