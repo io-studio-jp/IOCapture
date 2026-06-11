@@ -17,6 +17,7 @@ import { captureStill, captureStillTo } from './capture'
 import { convertToMp4, saveWebmAs } from './ffmpeg'
 import { startFrameCapture, stopFrameCapture } from './frameRecorder'
 import { getLastUrl, getPrefs, setPrefs } from './state'
+import { isVirtualRenderMode } from './renderState'
 import { checkForUpdate } from './updater'
 import type { StartFrameCaptureArgs, StopFrameCaptureArgs } from '../shared/ipc-types'
 
@@ -78,6 +79,11 @@ export function registerIpc(getWindow: () => BrowserWindow): void {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url)
   })
   ipcMain.handle(IPC.checkUpdate, () => checkForUpdate())
+
+  // 作品preloadがRenderモード(仮想時計)かを同期で問い合わせる
+  ipcMain.on('render:isVirtual', (e) => {
+    e.returnValue = isVirtualRenderMode()
+  })
 
   // 動画クロップ用: ウィンドウ外枠とコンテンツ領域の差（≒タイトルバー高さ）。
   // desktopCapturerはタイトルバー込みでウィンドウを撮るため、この分だけ原点をずらす。

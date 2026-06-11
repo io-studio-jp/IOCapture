@@ -1,3 +1,4 @@
+import { join } from 'path'
 import { WebContentsView, BrowserWindow, screen, ipcMain } from 'electron'
 import type { Rect } from '../shared/frameRect'
 import type { TargetSize } from '../shared/resolution'
@@ -46,7 +47,12 @@ function applyHide(): void {
 export function ensureArtworkView(win: BrowserWindow): WebContentsView {
   mainWin = win
   if (view) return view
-  view = new WebContentsView()
+  view = new WebContentsView({
+    webPreferences: {
+      // Renderモード時に仮想時計を注入する専用preload
+      preload: join(__dirname, '../preload/artwork.js'),
+    },
+  })
   win.contentView.addChildView(view)
   const wc = view.webContents
   // ウィンドウ破棄後にイベントが発火しても安全に送るためのヘルパー。
