@@ -58,17 +58,12 @@ export function annotatePng(png: Buffer, opts: AnnotatePngOptions = {}): Buffer 
   const inserts: Buffer[] = []
   if (!hasChunk(png, 'sRGB')) {
     inserts.push(buildChunk('sRGB', Buffer.from([0]))) // rendering intent: perceptual
-    // sRGB非対応デコーダ向けの互換ガンマ(1/2.2 → 45455/100000)
-    inserts.push(
-      buildChunk(
-        'gAMA',
-        (() => {
-          const b = Buffer.alloc(4)
-          b.writeUInt32BE(45455)
-          return b
-        })()
-      )
-    )
+  }
+  // sRGB非対応デコーダ向けの互換ガンマ(1/2.2 → 45455/100000)。gAMAは1つしか持てないため独立に確認
+  if (!hasChunk(png, 'gAMA')) {
+    const gama = Buffer.alloc(4)
+    gama.writeUInt32BE(45455)
+    inserts.push(buildChunk('gAMA', gama))
   }
   if (opts.dpi && opts.dpi > 0 && !hasChunk(png, 'pHYs')) {
     const ppm = Math.round(opts.dpi / 0.0254)

@@ -55,7 +55,9 @@ export async function saveWebmAs(
     const args =
       format === 'webp'
         ? ['-y', '-i', webmPath, '-an', '-c:v', 'libwebp_anim', '-loop', '0', '-lossless', '1', '-compression_level', '6', outPath]
-        : // 色空間タグ(BT.709)を明示してプレイヤー間の色ズレを防ぐ(入力は既にYUVなので行列変換はしない)
+        : // 色空間タグ(BT.709)を明示してプレイヤー間の色ズレを防ぐ(入力は既にYUVなので行列変換はしない)。
+          // 注: ChromiumのVP8エンコードはBT.601系の可能性があり、厳密には601→709変換を挟むのが
+          // 正しいかもしれない。彩色パターンでの実測検証がフォローアップ課題(設計書参照)。
           ['-y', '-i', webmPath, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', outPath]
     await run(ffmpegPath, args)
     const { canceled, filePath } = await dialog.showSaveDialog({

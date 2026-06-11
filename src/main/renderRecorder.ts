@@ -64,8 +64,10 @@ const round2 = (n: number): number => Math.max(2, Math.round(n / 2) * 2)
 
 export async function startRender(args: StartRenderArgs): Promise<RenderResult> {
   const { target, fps, durationSec, format } = args
-  // モーションブラーのサブフレーム数(1=Off)。不正値は1に丸める
-  const samples = Number.isFinite(args.blurSamples) ? Math.max(1, Math.floor(args.blurSamples)) : 1
+  // モーションブラーのサブフレーム数(1=Off)。不正値は1に丸め、暴走防止に上限16でクランプ
+  const samples = Number.isFinite(args.blurSamples)
+    ? Math.min(16, Math.max(1, Math.floor(args.blurSamples)))
+    : 1
 
   const view = getArtworkView()
   if (!view) return { ok: false, error: 'artwork view not ready' }
@@ -211,10 +213,11 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
         // モーションブラー: シャッター開(フレーム前半)をsamples分割して撮影・加算し、
         // シャッター閉(後半)は時間だけ進める。平均が1フレームになる。
         acc.fill(0)
-        for (let s = 0; s < samples; s++) {
+        for (let s = 0; s < samples && !cancelRequested; s++) {
           await stepVirtual((frameMs * SHUTTER) / samples, i)
           sumInto(acc, await captureTightFrame())
         }
+        if (cancelRequested) break
         await stepVirtual(frameMs * (1 - SHUTTER), i)
         buf = averageToBuffer(acc, samples)
       } else {

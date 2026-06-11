@@ -77,6 +77,12 @@ Stillのcm/dpi指定で撮ったPNGに `pHYs` チャンク(pixels per meter = dp
   (b)pngcheck相当(自作スクリプト)でsRGB/pHYsチャンク確認 (c)ブラー有効時の出力で
   移動体に尾引きがあることを目視 (d)SSAA有効時のエッジ比較
 
+## フォローアップ(レビュー起票)
+
+- Live経路(saveWebmAs)のBT.709タグ: ChromiumのVP8エンコードはBT.601系の可能性があり、
+  厳密には601→709の行列変換を挟むべきかもしれない。彩色テストパターンで実測検証して
+  必要なら `-vf scale=in_color_matrix=bt601:out_color_matrix=bt709` を追加する
+
 ## 受け入れ条件
 
 1. Render(blur 4x + SSAA 2x)で4K60が完走し、フレーム数=秒数×60を維持

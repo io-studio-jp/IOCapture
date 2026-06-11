@@ -99,3 +99,25 @@ test('returns input unchanged when not a PNG', () => {
   const notPng = Buffer.from('hello')
   expect(annotatePng(notPng)).toEqual(notPng)
 })
+
+test('does not duplicate gAMA when PNG already has one (without sRGB)', () => {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  const ihdrData = Buffer.alloc(13)
+  ihdrData.writeUInt32BE(2, 0)
+  ihdrData.writeUInt32BE(2, 4)
+  ihdrData[8] = 8
+  ihdrData[9] = 6
+  const gamaData = Buffer.alloc(4)
+  gamaData.writeUInt32BE(50000)
+  const withGama = Buffer.concat([
+    sig,
+    chunk('IHDR', ihdrData),
+    chunk('gAMA', gamaData),
+    chunk('IDAT', Buffer.from([0])),
+    chunk('IEND', Buffer.alloc(0))
+  ])
+  const out = annotatePng(withGama)
+  const chunks = parseChunks(out)
+  expect(chunks.filter((c) => c.type === 'gAMA')).toHaveLength(1)
+  expect(chunks.filter((c) => c.type === 'sRGB')).toHaveLength(1)
+})
