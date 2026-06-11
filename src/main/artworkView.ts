@@ -252,9 +252,19 @@ function unfreezePreview(): void {
   sendMain('capture:unfreeze', null)
 }
 
+export type CaptureSurfaceHandle = {
+  /** enlarge時: capturePageが返すはずの物理px。native時はnull(そのまま撮って縮小する) */
+  expected: TargetSize | null
+  release: () => Promise<void>
+}
+
 /**
+ * 撮影サーフェスを確保する。targetが表示以下ならnative(何もしない)。
+ * 超えるなら、フリーズ画像を表示→viewを左端2pxスリバーを残して画面外で拡大
+ * →zoomでレイアウト維持、まで済ませた状態で返す。releaseで完全に元へ戻す。
+ *
  * targetが表示の物理px以下なら、viewをそのまま撮る(呼び出し側が高品質縮小で合わせる)。
- * 表示を超えるtargetでは、撮る瞬間だけviewのboundsを目標物理pxぶんに拡大し、zoomFactorで
+ * 表示を超えるtargetでは、viewのboundsを目標物理pxぶんに拡大し、zoomFactorで
  * レイアウト幅を維持して撮り、終わったら戻す。enableDeviceEmulationのdeviceScaleFactorは
  * capturePageの解像度に反映されない(表示DPRのまま)ため、実際にレンダリング面を広げて撮る。
  * boundsがウィンドウより大きくてもcapturePageは全面を返し、zoomはdevicePixelRatioに
@@ -262,10 +272,7 @@ function unfreezePreview(): void {
  * 拡大中はプレビューが乱れるため、直前のスナップショットをレンダラーに固定表示させた上で
  * viewを左端2pxだけ残して画面外へ退避する(ユーザーには見た目の変化がほぼ無い)。
  */
-export async function withCaptureSurface<T>(
-  target: TargetSize,
-  fn: (v: WebContentsView) => Promise<T>,
-): Promise<T> {
+export async function acquireCaptureSurface(target: TargetSize): Promise<CaptureSurfaceHandle> {
   if (!view) throw new Error('artwork view not ready')
   const wc = view.webContents
   const prevBounds = view.getBounds()
@@ -275,7 +282,7 @@ export async function withCaptureSurface<T>(
       ? screen.getDisplayMatching(mainWin.getBounds()).scaleFactor
       : screen.getPrimaryDisplay().scaleFactor
   const plan = planCaptureSurface(target, prevBounds.width, sf)
-  if (plan.kind === 'native') return fn(view)
+  if (plan.kind === 'native') return { expected: null, release: async () => {} }
 
   await freezePreview(wc)
   view.setBounds({
@@ -283,20 +290,42 @@ export async function withCaptureSurface<T>(
     y: prevBounds.y,
     ...plan.bounds,
   })
-  wc.setZoomFactor(plan.zoomFactor)
   try {
+    wc.setZoomFactor(plan.zoomFactor)
     // サイズ・DPRを変えただけでは多くの作品はcanvasを描き直さない。
     // resizeイベントを送って作品自身に高解像度バッファで再描画させ、数フレーム安定を待つ。
     await settleAfterDprChange(wc)
-    return await fn(view!)
-  } finally {
+  } catch (err) {
     wc.setZoomFactor(prevZoom)
     view.setBounds(prevBounds)
-    // 表示を元へ戻すため、作品にもう一度再レイアウトを促す。
-    wc.executeJavaScript(`window.dispatchEvent(new Event('resize'))`).catch(() => {})
-    // 元のサイズでの再描画が画面に乗るまで少し待ってからフリーズ画像を外す(復帰の乱れを隠す)。
-    await new Promise((r) => setTimeout(r, 120))
     unfreezePreview()
+    throw err
+  }
+  return {
+    expected: plan.expected,
+    release: async () => {
+      if (!view) return
+      wc.setZoomFactor(prevZoom)
+      view.setBounds(prevBounds)
+      // 表示を元へ戻すため、作品にもう一度再レイアウトを促す。
+      wc.executeJavaScript(`window.dispatchEvent(new Event('resize'))`).catch(() => {})
+      // 元のサイズでの再描画が画面に乗るまで少し待ってからフリーズ画像を外す。
+      await new Promise((r) => setTimeout(r, 120))
+      unfreezePreview()
+    }
+  }
+}
+
+/** 1回だけ撮る用途のラッパー: 確保→fn→解放。 */
+export async function withCaptureSurface<T>(
+  target: TargetSize,
+  fn: (v: WebContentsView) => Promise<T>,
+): Promise<T> {
+  const handle = await acquireCaptureSurface(target)
+  try {
+    return await fn(view!)
+  } finally {
+    await handle.release()
   }
 }
 
