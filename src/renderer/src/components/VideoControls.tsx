@@ -214,6 +214,10 @@ export function VideoControls({
     return `→ ${rect.width}×${rect.height} (frame)`
   })()
 
+  // Render最終フレーム到達後のffmpeg書き出し中(キャンセル不可)。
+  // progressがnull(準備中=リロード/サーフェス確保など)はfinalizingではない点に注意。
+  const finalizing = progress !== null && progress.frame === progress.total
+
   return (
     <section className="space-y-3 border-t border-border px-5 py-5">
       <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Video</h2>
@@ -337,8 +341,9 @@ export function VideoControls({
       {recording && mode === 'render' && (
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="size-2 animate-pulse rounded-full bg-red-500" />
-            {progress && progress.frame === progress.total
+            {/* Finalizing中は録画中ではないので点滅を止める */}
+            <span className={`size-2 rounded-full bg-red-500 ${finalizing ? '' : 'animate-pulse'}`} />
+            {finalizing
               ? 'Finalizing…'
               : `Rendering… ${progress ? `${progress.frame}/${progress.total}` : 'starting'}`}
           </div>
@@ -357,7 +362,7 @@ export function VideoControls({
         className="w-full"
         variant={recording ? 'destructive' : 'default'}
         onClick={onToggle}
-        disabled={counting || (recording && mode === 'render' && progress?.frame === progress?.total)}
+        disabled={counting || (recording && mode === 'render' && finalizing)}
       >
         {recording ? <Square className="fill-current" /> : <Circle className="size-3 fill-current" />}
         {recording ? (mode === 'render' ? 'Cancel' : 'Stop') : counting ? 'Starting…' : 'Record'}
