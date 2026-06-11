@@ -4,6 +4,9 @@
  *
  * 注意: createVirtualClock は toString() でページのmain worldへ注入されるため、
  * 自己完結であること(モジュールスコープの変数・import・TSヘルパを参照しない)。
+ *
+ * 仮想化されないもの(既知の制限): CSSアニメーション/WAAPI、<video>等のメディア再生、
+ * Worker内のタイマー、requestIdleCallback。これらに依存する作品は実時間で進んでしまう。
  */
 export type VirtualClockDeps = {
   /** 実rAF: stepの最後に実フレームの描画完了を待つために使う */
@@ -22,10 +25,15 @@ export function createVirtualClock(deps: VirtualClockDeps): {
 } {
   let now = 0
   let nextId = 1
+  /** 実行中タイマーのネスト深度(HTML仕様のネストクランプ用) */
+  let nesting = 0
+  /** step多重実行ガード(描画待ちの交錯による状態破壊を防ぐ) */
+  let stepping = false
   type Timer = {
     id: number
     due: number
     every: number | null
+    depth: number
     cb: (...a: unknown[]) => void
     args: unknown[]
   }
@@ -35,11 +43,23 @@ export function createVirtualClock(deps: VirtualClockDeps): {
   const addTimer = (
     cb: (...a: unknown[]) => void,
     ms: number,
-    every: number | null,
+    repeat: boolean,
     args: unknown[]
   ): number => {
     const id = nextId++
-    timers.push({ id, due: now + Math.max(0, ms), every, cb, args })
+    // ブラウザ同様、NaN/非有限の遅延は0msとして扱う
+    let delay = Number.isFinite(+ms) ? Math.max(0, +ms) : 0
+    const depth = nesting + 1
+    // HTML仕様のネストクランプ: 深度5以上は最低4ms。ゼロ遅延の再帰setTimeoutでもstepが必ず終わる
+    if (depth >= 5) delay = Math.max(delay, 4)
+    timers.push({
+      id,
+      due: now + delay,
+      every: repeat ? Math.max(1, delay) : null,
+      depth,
+      cb,
+      args
+    })
     return id
   }
   const removeTimer = (id: number): void => {
@@ -49,9 +69,9 @@ export function createVirtualClock(deps: VirtualClockDeps): {
 
   return {
     now: () => now,
-    setTimeout: (cb, ms = 0, ...args) => addTimer(cb, ms, null, args),
+    setTimeout: (cb, ms = 0, ...args) => addTimer(cb, ms, false, args),
     clearTimeout: removeTimer,
-    setInterval: (cb, ms = 0, ...args) => addTimer(cb, ms, Math.max(1, ms), args),
+    setInterval: (cb, ms = 0, ...args) => addTimer(cb, ms, true, args),
     clearInterval: removeTimer,
     requestAnimationFrame: (cb) => {
       const id = nextId++
@@ -63,26 +83,45 @@ export function createVirtualClock(deps: VirtualClockDeps): {
       if (i >= 0) rafQueue.splice(i, 1)
     },
     async step(ms) {
-      const target = now + ms
-      // 期限順にタイマーを実行。実行中に追加された期限内タイマーも拾う
-      for (;;) {
-        let earliest: Timer | null = null
-        for (const t of timers) {
-          if (t.due <= target && (!earliest || t.due < earliest.due)) earliest = t
+      if (stepping) throw new Error('step already in progress')
+      stepping = true
+      try {
+        const target = now + ms
+        // 期限順にタイマーを実行。実行中に追加された期限内タイマーも拾う
+        for (;;) {
+          let earliest: Timer | null = null
+          for (const t of timers) {
+            if (t.due <= target && (!earliest || t.due < earliest.due)) earliest = t
+          }
+          if (!earliest) break
+          now = Math.max(now, earliest.due)
+          if (earliest.every != null) earliest.due += earliest.every
+          else removeTimer(earliest.id)
+          nesting = earliest.depth
+          try {
+            earliest.cb(...earliest.args)
+          } catch (e) {
+            // コールバックの例外でstepを壊さない(報告して続行)
+            console.error(e)
+          }
+          nesting = 0
         }
-        if (!earliest) break
-        now = Math.max(now, earliest.due)
-        if (earliest.every != null) earliest.due += earliest.every
-        else removeTimer(earliest.id)
-        earliest.cb(...earliest.args)
+        now = target
+        // rAFはフレームにつき1回。実行中のrequestAnimationFrameは次フレームへ
+        const q = rafQueue
+        rafQueue = []
+        for (const r of q) {
+          try {
+            r.cb(now)
+          } catch (e) {
+            console.error(e)
+          }
+        }
+        // 実フレームの描画完了を待つ(ダブルrAF)。capturePageが新しい絵を見られるように
+        await new Promise<void>((res) => deps.realRaf(() => deps.realRaf(() => res())))
+      } finally {
+        stepping = false
       }
-      now = target
-      // rAFはフレームにつき1回。実行中のrequestAnimationFrameは次フレームへ
-      const q = rafQueue
-      rafQueue = []
-      for (const r of q) r.cb(now)
-      // 実フレームの描画完了を待つ(ダブルrAF)。capturePageが新しい絵を見られるように
-      await new Promise<void>((res) => deps.realRaf(() => deps.realRaf(() => res())))
     }
   }
 }
@@ -101,14 +140,19 @@ export const VIRTUAL_CLOCK_BOOTSTRAP = `(() => {
   const t0 = RealDate.now();
   performance.now = () => clock.now();
   window.Date = new Proxy(RealDate, {
-    construct(target, args) {
-      return args.length ? new target(...args) : new target(t0 + clock.now());
+    construct(target, args, newTarget) {
+      // サブクラス(new.target)を保ったまま、引数なしは仮想時刻で生成する
+      return Reflect.construct(target, args.length ? args : [t0 + clock.now()], newTarget);
     },
     apply() {
       return new RealDate(t0 + clock.now()).toString();
     },
+    get(target, prop, receiver) {
+      // Date.nowだけ仮想時刻を返す。本物のRealDate.nowは書き換えない(汚染防止)
+      if (prop === 'now') return () => t0 + clock.now();
+      return Reflect.get(target, prop, receiver);
+    },
   });
-  window.Date.now = () => t0 + clock.now();
   window.requestAnimationFrame = (cb) => clock.requestAnimationFrame(cb);
   window.cancelAnimationFrame = (id) => clock.cancelAnimationFrame(id);
   window.setTimeout = (cb, ms, ...a) => clock.setTimeout(cb, ms, ...a);
