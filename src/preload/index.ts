@@ -5,15 +5,13 @@ import type {
   CaptureStillArgs, CaptureStillResult, CaptureStillToArgs,
   ConvertToMp4Args, ConvertToMp4Result,
   SaveBlobArgs, SaveBlobResult,
-  StartFrameCaptureResult,
-  StopFrameCaptureResult,
+  RenderResult,
   StartRenderArgs,
   RenderProgress,
   Prefs,
   UpdateInfo,
 } from '../shared/ipc-types'
 import type { Rect } from '../shared/frameRect'
-import type { TargetSize } from '../shared/resolution'
 
 const api = {
   loadUrl: (url: string) => ipcRenderer.invoke(IPC.loadUrl, { url }),
@@ -53,16 +51,7 @@ const api = {
   revealFile: (path: string) => ipcRenderer.send(IPC.revealFile, path),
   openExternal: (url: string) => ipcRenderer.send(IPC.openExternal, url),
   checkUpdate: (): Promise<UpdateInfo> => ipcRenderer.invoke(IPC.checkUpdate),
-  startFrameCapture: (
-    target: TargetSize,
-    fps: number,
-    includeCursor: boolean,
-    format: 'mp4' | 'webp',
-  ): Promise<StartFrameCaptureResult> =>
-    ipcRenderer.invoke(IPC.startFrameCapture, { target, fps, includeCursor, format }),
-  stopFrameCapture: (audio: ArrayBuffer | null): Promise<StopFrameCaptureResult> =>
-    ipcRenderer.invoke(IPC.stopFrameCapture, { audio }),
-  saveWebmAsMp4: (data: ArrayBuffer, format: 'mp4' | 'webp'): Promise<StopFrameCaptureResult> =>
+  saveWebmAsMp4: (data: ArrayBuffer, format: 'mp4' | 'webp'): Promise<RenderResult> =>
     ipcRenderer.invoke(IPC.saveWebmAsMp4, { data, format }),
   onPickState: (cb: (picking: boolean) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, picking: boolean): void => cb(picking)
@@ -87,7 +76,7 @@ const api = {
     return (): void => { ipcRenderer.removeListener('capture:unfreeze', handler) }
   },
   captureFreezeReady: () => ipcRenderer.send('capture:freezeReady'),
-  startRender: (args: StartRenderArgs): Promise<StopFrameCaptureResult> =>
+  startRender: (args: StartRenderArgs): Promise<RenderResult> =>
     ipcRenderer.invoke(IPC.startRender, args),
   cancelRender: () => ipcRenderer.send(IPC.cancelRender),
   onRenderProgress: (cb: (p: RenderProgress) => void) => {

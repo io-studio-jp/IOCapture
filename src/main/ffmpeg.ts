@@ -8,7 +8,7 @@ import ffmpegStatic from 'ffmpeg-static'
 import type {
   ConvertToMp4Args,
   ConvertToMp4Result,
-  StopFrameCaptureResult,
+  RenderResult,
 } from '../shared/ipc-types'
 
 const run = promisify(execFile)
@@ -44,7 +44,7 @@ export async function convertToMp4(args: ConvertToMp4Args): Promise<ConvertToMp4
 export async function saveWebmAs(
   data: ArrayBuffer,
   format: 'mp4' | 'webp',
-): Promise<StopFrameCaptureResult> {
+): Promise<RenderResult> {
   if (!ffmpegPath) return { ok: false, error: 'ffmpeg binary not found' }
   const dir = await mkdtemp(join(tmpdir(), 'iocapture-'))
   const webmPath = join(dir, 'in.webm')

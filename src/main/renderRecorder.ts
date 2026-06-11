@@ -13,7 +13,7 @@ import {
   unfreezeArtworkPreview
 } from './artworkView'
 import { setVirtualRenderMode } from './renderState'
-import type { StartRenderArgs, StopFrameCaptureResult, RenderProgress } from '../shared/ipc-types'
+import type { StartRenderArgs, RenderResult, RenderProgress } from '../shared/ipc-types'
 
 const ffmpegPath = ffmpegStatic ? ffmpegStatic.replace('app.asar', 'app.asar.unpacked') : null
 
@@ -123,7 +123,7 @@ function reloadIntoLiveMode(): void {
 // 辺長を2の倍数に丸める(libx264はodd幅を拒否する)。最小2px。
 const round2 = (n: number): number => Math.max(2, Math.round(n / 2) * 2)
 
-export async function startRender(args: StartRenderArgs): Promise<StopFrameCaptureResult> {
+export async function startRender(args: StartRenderArgs): Promise<RenderResult> {
   const { target, fps, durationSec, format } = args
 
   const view = getArtworkView()

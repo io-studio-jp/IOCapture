@@ -10,8 +10,6 @@ export const IPC = {
   chooseFolder: 'file:chooseFolder',
   convertToMp4: 'video:convertToMp4',
   saveBlob: 'file:saveBlob',
-  startFrameCapture: 'video:startFrameCapture',
-  stopFrameCapture: 'video:stopFrameCapture',
   saveWebmAsMp4: 'video:saveWebmAsMp4',
   // 機能2: ナビゲーション
   goBack: 'artwork:goBack',
@@ -47,22 +45,7 @@ export type ConvertToMp4Result = { ok: true; mp4Path: string } | { ok: false; er
 export type SaveBlobArgs = { data: ArrayBuffer; defaultName: string }
 export type SaveBlobResult = { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
 export type VideoFormat = 'mp4' | 'webp'
-export type StartFrameCaptureArgs = {
-  target: TargetSize
-  fps: number
-  includeCursor: boolean
-  format: VideoFormat
-}
-// width/height: 実際に録画される解像度。表示中のビューの物理解像度が上限のため、
-// 要求targetより小さくキャップされることがある(UIで知らせる)。
-export type StartFrameCaptureResult = {
-  ok: boolean
-  error?: string
-  width?: number
-  height?: number
-}
-export type StopFrameCaptureArgs = { audio: ArrayBuffer | null }
-export type StopFrameCaptureResult =
+export type RenderResult =
   | { ok: true; mp4Path: string }
   | { ok: false; canceled?: boolean; error?: string }
 
@@ -86,6 +69,7 @@ export type Prefs = {
   hideCursor?: boolean
   stillTimer?: number
   videoTimer?: number
+  // 旧: カーソル合成設定(Cleanエンジン削除済み。読み取りのみ)
   includeCursor?: boolean
   // 旧: 録画エンジン(captureModeへ移行済み。読み取りのみ)
   captureEngine?: 'frame' | 'screen'
