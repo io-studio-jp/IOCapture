@@ -1,8 +1,12 @@
 import { test, expect, vi } from 'vitest'
 import { createVirtualClock } from './virtualClock'
 
-// テスト用: 実rAFは即時実行で代用(stepの描画待ちを素通しにする)
-const deps = { realRaf: (cb: (t: number) => void): number => (cb(0), 0) }
+// テスト用: 実rAFは即時実行で代用(stepの描画待ちを素通しにする)。
+// realSetTimeoutはタイムアウト保険なので、rAF側が即解決する以上呼ばれても影響しない。
+const deps = {
+  realRaf: (cb: (t: number) => void): number => (cb(0), 0),
+  realSetTimeout: (cb: () => void): unknown => (cb(), 0)
+}
 
 test('now() starts at 0 and advances by step', async () => {
   const c = createVirtualClock(deps)

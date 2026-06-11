@@ -136,6 +136,10 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
   if (!ffmpegPath) return { ok: false, error: 'ffmpeg binary not found' }
   if (active) return { ok: false, error: 'already rendering' }
 
+  // スリバー退避中もrAF/コンポジットを止めさせない(オフスクリーン扱いで
+  // 実rAFが停止するとstepの描画待ちがタイムアウトする)。
+  view.webContents.setBackgroundThrottling(false)
+
   active = true
   cancelRequested = false
 
@@ -306,14 +310,20 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
     active = false
     // 2. 一時ディレクトリを削除
     if (tmpDir) await rm(tmpDir, { recursive: true, force: true }).catch(() => {})
-    // 3. ライブモードへ復帰(実時間に戻り始める)
+    // 3. バックグラウンドスロットリングを通常運用に戻す
+    try {
+      if (!view.webContents.isDestroyed()) view.webContents.setBackgroundThrottling(true)
+    } catch {
+      // 破棄競合等は無視(復帰処理を止めない)
+    }
+    // 4. ライブモードへ復帰(実時間に戻り始める)
     reloadIntoLiveMode()
-    // 4. ライブページの読み込み完了を待つ(固定解除時に空白のリロード画面を見せない)
+    // 5. ライブページの読み込み完了を待つ(固定解除時に空白のリロード画面を見せない)
     const liveWc = getArtworkView()?.webContents
     if (liveWc) await waitForLoad(liveWc, LIVE_RELOAD_TIMEOUT_MS)
-    // 5. サーフェス解放(bounds/zoom復元+120ms待機+unfreeze)
+    // 6. サーフェス解放(bounds/zoom復元+120ms待機+unfreeze)
     await surface?.release().catch(() => {})
-    // 6. プレビュー固定を解除(native-pathではreleaseがno-opでunfreezeしないため必要)
+    // 7. プレビュー固定を解除(native-pathではreleaseがno-opでunfreezeしないため必要)
     unfreezeArtworkPreview()
   }
 }

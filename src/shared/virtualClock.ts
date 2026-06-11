@@ -11,6 +11,8 @@
 export type VirtualClockDeps = {
   /** 実rAF: stepの最後に実フレームの描画完了を待つために使う */
   realRaf: (cb: (t: number) => void) => number
+  /** 実setTimeout: コンポジタが停止していてもstepの描画待ちが有限で終わるための保険 */
+  realSetTimeout: (cb: () => void, ms: number) => unknown
 }
 
 export function createVirtualClock(deps: VirtualClockDeps): {
@@ -117,8 +119,19 @@ export function createVirtualClock(deps: VirtualClockDeps): {
             console.error(e)
           }
         }
-        // 実フレームの描画完了を待つ(ダブルrAF)。capturePageが新しい絵を見られるように
-        await new Promise<void>((res) => deps.realRaf(() => deps.realRaf(() => res())))
+        // 実フレームの描画完了を待つ(ダブルrAF)。コンポジタが止まっている場合に備えて
+        // 上限100msで打ち切る(capturePage自体がフレームを強制するため安全)。
+        await new Promise((res) => {
+          let done = false
+          const finish = (): void => {
+            if (!done) {
+              done = true
+              res(undefined)
+            }
+          }
+          deps.realRaf(() => deps.realRaf(finish))
+          deps.realSetTimeout(finish, 100)
+        })
       } finally {
         stepping = false
       }
@@ -135,6 +148,8 @@ export const VIRTUAL_CLOCK_BOOTSTRAP = `(() => {
   const createVirtualClock = ${createVirtualClock.toString()};
   const clock = createVirtualClock({
     realRaf: window.requestAnimationFrame.bind(window),
+    // 注意: 後段のwindow.setTimeout上書きより前に本物をbindして捕まえること
+    realSetTimeout: window.setTimeout.bind(window),
   });
   const RealDate = Date;
   const t0 = RealDate.now();
