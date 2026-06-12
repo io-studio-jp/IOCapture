@@ -2,7 +2,6 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { copyFile, mkdtemp, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { dialog } from 'electron'
 import { once } from 'events'
 import ffmpegStatic from 'ffmpeg-static'
 import {
@@ -12,6 +11,7 @@ import {
   freezeArtworkPreview,
   unfreezeArtworkPreview
 } from './artworkView'
+import { showSaveDialogAttached } from './saveDialog'
 import { planSupersample } from '../shared/supersample'
 import { sumInto, averageToBuffer } from '../shared/frameBlend'
 import type { StartRenderArgs, RenderResult, RenderProgress } from '../shared/ipc-types'
@@ -259,7 +259,7 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
     }
 
     // 7. 保存ダイアログ → ファイルをコピー。
-    const { canceled, filePath } = await dialog.showSaveDialog({
+    const { canceled, filePath } = await showSaveDialogAttached({
       defaultPath: `render-${Date.now()}.${ext}`,
       filters: [{ name: ext.toUpperCase(), extensions: [ext] }]
     })

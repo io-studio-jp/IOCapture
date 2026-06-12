@@ -3,8 +3,8 @@ import { promisify } from 'util'
 import { writeFile, copyFile, rm, mkdtemp } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { dialog } from 'electron'
 import ffmpegStatic from 'ffmpeg-static'
+import { showSaveDialogAttached } from './saveDialog'
 import type {
   ConvertToMp4Args,
   ConvertToMp4Result,
@@ -60,7 +60,7 @@ export async function saveWebmAs(
           // 正しいかもしれない。彩色パターンでの実測検証がフォローアップ課題(設計書参照)。
           ['-y', '-i', webmPath, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', outPath]
     await run(ffmpegPath, args)
-    const { canceled, filePath } = await dialog.showSaveDialog({
+    const { canceled, filePath } = await showSaveDialogAttached({
       defaultPath: `capture-${Date.now()}.${ext}`,
       filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
     })

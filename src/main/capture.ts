@@ -1,7 +1,7 @@
-import { dialog } from 'electron'
 import { writeFile } from 'fs/promises'
 import { join, resolve, sep } from 'path'
 import { withCaptureSurface, getArtworkView } from './artworkView'
+import { showSaveDialogAttached } from './saveDialog'
 import { planSupersample } from '../shared/supersample'
 import { annotatePng } from '../shared/png'
 import type {
@@ -31,7 +31,7 @@ async function capturePng(
 export async function captureStill(args: CaptureStillArgs): Promise<CaptureStillResult> {
   try {
     const png = await capturePng(args.target, { supersample: args.supersample, dpi: args.dpi })
-    const { canceled, filePath } = await dialog.showSaveDialog({
+    const { canceled, filePath } = await showSaveDialogAttached({
       defaultPath: `capture-${Date.now()}.png`,
       filters: [{ name: 'PNG', extensions: ['png'] }],
     })
