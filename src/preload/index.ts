@@ -85,6 +85,18 @@ const api = {
     return (): void => {
       ipcRenderer.removeListener('render:progress', handler)
     }
+  },
+  // Render中のライブプレビュー: Mainが実際の出力フレーム(縮小)を流してくる。
+  onRenderPreview: (cb: (dataUrl: string) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, dataUrl: string): void => cb(dataUrl)
+    ipcRenderer.on('render:preview', handler)
+    return (): void => { ipcRenderer.removeListener('render:preview', handler) }
+  },
+  // 進捗モーダルの表示可否: viewが画面外へ退避している間だけtrue(被り防止)。
+  onRenderOverlay: (cb: (visible: boolean) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, visible: boolean): void => cb(visible)
+    ipcRenderer.on('render:overlay', handler)
+    return (): void => { ipcRenderer.removeListener('render:overlay', handler) }
   }
 }
 

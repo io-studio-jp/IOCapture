@@ -95,8 +95,17 @@ export function resetArtworkView(): void {
   picking = false
 }
 
+// 撮影中(Render/高解像度Still)はビューを拡大して画面外へ退避しているため、リサイズ由来の
+// bounds変更(レンダラーのResizeObserver→setFrameRect)を適用すると退避ビューが画面にせり出す。
+// ロック中は最新rectを覚えるだけにして、解除時(restore)に反映する。
+let boundsLocked = false
+export function setArtworkBoundsLocked(locked: boolean): void {
+  boundsLocked = locked
+}
+
 export function setArtworkRect(rect: Rect): void {
   lastRect = rect
+  if (boundsLocked || surfaceHeld) return
   view?.setBounds(rect)
 }
 
@@ -231,6 +240,36 @@ export function stopPicking(): void {
 // 拡大撮影中、viewはウィンドウ左端にこの幅だけ残して画面外へ退避する。
 // 完全に画面外へ出すとコンポジタが新しいサーフェスを描画しない(実測)ため、最小限を残す。
 const CAPTURE_SLIVER_PX = 2
+
+// 退避で左端に残る2pxスリバーには拡大中の作品がチラ見えして不自然なので、不透明な黒ビューで覆う。
+// 「画面外へ出す」と違い、同一ウィンドウ内で別ビューを前面に重ねるだけなのでviewはウィンドウ内に
+// 留まり、コンポジット(=capturePageの描画)は継続する。撮影中だけ表示し、終了で画面外へ退ける。
+let sliverCover: WebContentsView | null = null
+const COVER_HIDDEN_BOUNDS = { x: -10, y: 0, width: 1, height: 1 }
+
+function ensureSliverCover(win: BrowserWindow): WebContentsView {
+  if (sliverCover && !sliverCover.webContents.isDestroyed()) return sliverCover
+  const cover = new WebContentsView()
+  cover.setBackgroundColor('#000000')
+  // 背景色だけだと環境により透ける場合があるため、本文も黒で確実に塗る。
+  cover.webContents.loadURL('data:text/html,<body style="margin:0;background:%23000"></body>')
+  win.contentView.addChildView(cover)
+  cover.setBounds(COVER_HIDDEN_BOUNDS)
+  sliverCover = cover
+  return cover
+}
+
+function showSliverCover(win: BrowserWindow, region: { y: number; height: number }): void {
+  const cover = ensureSliverCover(win)
+  win.contentView.addChildView(cover) // 作品viewより後に積み直して最前面を保証する
+  cover.setBounds({ x: 0, y: region.y, width: CAPTURE_SLIVER_PX, height: Math.max(1, region.height) })
+}
+
+function hideSliverCover(): void {
+  if (sliverCover && !sliverCover.webContents.isDestroyed()) {
+    sliverCover.setBounds(COVER_HIDDEN_BOUNDS)
+  }
+}
 // プレビュー固定(フリーズ画像)の表示完了を待つ上限。レンダラーが応答しなくても撮影は続行する。
 const FREEZE_READY_TIMEOUT_MS = 300
 
@@ -287,7 +326,10 @@ let surfaceHeld = false
  * 拡大中はプレビューが乱れるため、直前のスナップショットをレンダラーに固定表示させた上で
  * viewを左端2pxだけ残して画面外へ退避する(ユーザーには見た目の変化がほぼ無い)。
  */
-export async function acquireCaptureSurface(target: TargetSize): Promise<CaptureSurfaceHandle> {
+export async function acquireCaptureSurface(
+  target: TargetSize,
+  opts: { offscreen?: boolean } = {},
+): Promise<CaptureSurfaceHandle> {
   if (!view) throw new Error('artwork view not ready')
   const wc = view.webContents
   const prevBounds = view.getBounds()
@@ -297,7 +339,8 @@ export async function acquireCaptureSurface(target: TargetSize): Promise<Capture
       ? screen.getDisplayMatching(mainWin.getBounds()).scaleFactor
       : screen.getPrimaryDisplay().scaleFactor
   const plan = planCaptureSurface(target, prevBounds.width, sf)
-  if (plan.kind === 'native') return { expected: null, release: async () => {} }
+  // nativeで退避不要(=単発の静止画撮影)ならそのまま撮る。Render時はoffscreenでviewを隠す。
+  if (plan.kind === 'native' && !opts.offscreen) return { expected: null, release: async () => {} }
 
   if (surfaceHeld) throw new Error('capture surface already in use')
   surfaceHeld = true
@@ -306,9 +349,11 @@ export async function acquireCaptureSurface(target: TargetSize): Promise<Capture
   // 確保時のwebContentsが現在のviewのものか確認してから触る。
   const restore = async (): Promise<void> => {
     surfaceHeld = false
+    hideSliverCover()
     if (!view || view.webContents !== wc || wc.isDestroyed()) return
     wc.setZoomFactor(prevZoom)
-    view.setBounds(prevBounds)
+    // 撮影中にリサイズされていれば最新のrectへ戻す(無ければ確保時のbounds)。
+    view.setBounds(lastRect ?? prevBounds)
     // 表示を元へ戻すため、作品にもう一度再レイアウトを促す。
     wc.executeJavaScript(`window.dispatchEvent(new Event('resize'))`).catch(() => {})
     // 元のサイズでの再描画が画面に乗るまで少し待ってからフリーズ画像を外す。
@@ -318,15 +363,27 @@ export async function acquireCaptureSurface(target: TargetSize): Promise<Capture
 
   await freezePreview(wc)
   try {
-    view.setBounds({
-      x: CAPTURE_SLIVER_PX - plan.bounds.width,
-      y: prevBounds.y,
-      ...plan.bounds,
-    })
-    wc.setZoomFactor(plan.zoomFactor)
-    // サイズ・DPRを変えただけでは多くの作品はcanvasを描き直さない。
-    // resizeイベントを送って作品自身に高解像度バッファで再描画させ、数フレーム安定を待つ。
-    await settleAfterDprChange(wc)
+    if (plan.kind === 'enlarge') {
+      // 表示を超える解像度: viewを目標物理pxへ拡大し、zoomでレイアウト幅を維持して画面外へ退避。
+      view.setBounds({ x: CAPTURE_SLIVER_PX - plan.bounds.width, y: prevBounds.y, ...plan.bounds })
+      wc.setZoomFactor(plan.zoomFactor)
+    } else {
+      // native+offscreen: 拡大せず、現在サイズのまま画面外へ退避するだけ(撮影中ユーザーに見せない)。
+      view.setBounds({
+        x: CAPTURE_SLIVER_PX - prevBounds.width,
+        y: prevBounds.y,
+        width: prevBounds.width,
+        height: prevBounds.height,
+      })
+    }
+    // 左端に残るスリバーを不透明カバーで隠す(viewはウィンドウ内のままなのでコンポジットは継続)。
+    // 撮影中のリサイズでも常に覆えるよう、ディスプレイ高さいっぱいを上端から覆う。
+    if (mainWin && !mainWin.isDestroyed()) {
+      const dispHeight = screen.getDisplayMatching(mainWin.getBounds()).size.height
+      showSliverCover(mainWin, { y: 0, height: dispHeight })
+    }
+    // 拡大時はサイズ・DPRが変わるので作品に再レイアウトを促し安定を待つ。退避だけのnativeでは不要。
+    if (plan.kind === 'enlarge') await settleAfterDprChange(wc)
   } catch (err) {
     // 確保に失敗したら元へ戻す。restore自体の失敗で元のエラーを隠さない。
     await restore().catch(() => {})
@@ -334,7 +391,7 @@ export async function acquireCaptureSurface(target: TargetSize): Promise<Capture
   }
   let released = false
   return {
-    expected: plan.expected,
+    expected: plan.kind === 'enlarge' ? plan.expected : null,
     release: async () => {
       if (released) return
       released = true

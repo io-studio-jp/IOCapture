@@ -78,6 +78,12 @@ export function VideoControls({
   // Render進捗(録画中のみ)
   const [progress, setProgress] = useState<{ frame: number; total: number } | null>(null)
   useEffect(() => window.capture.onRenderProgress((p) => setProgress(p)), [])
+  // Render中のライブプレビュー(実際の出力フレームを縮小したもの)
+  const [renderPreview, setRenderPreview] = useState<string | null>(null)
+  useEffect(() => window.capture.onRenderPreview((d) => setRenderPreview(d)), [])
+  // 進捗モーダルの表示可否(viewが画面外へ退避中だけtrue。開始/終了の一瞬の被りを防ぐ)
+  const [overlayVisible, setOverlayVisible] = useState(false)
+  useEffect(() => window.capture.onRenderOverlay((v) => setOverlayVisible(v)), [])
   // 選択中ソースの入力レベル(0〜1)。off/WebP/取得失敗時はnull
   const audioLevel = useAudioLevel(audioSource, mode === 'live' && format === 'mp4')
   const handleRef = useRef<RecordHandle | null>(null)
@@ -148,6 +154,7 @@ export function VideoControls({
         setRecording(true)
         startingRef.current = false // RenderはsetRecording(true)で以降onToggleがCancelに分岐する
         setProgress(null)
+        setRenderPreview(null) // 前回フレームの残像を見せない
         const res = await startRenderRecording(target, lengthSec, format, { blurSamples, supersample }, fps)
         setRecording(false)
         setProgress(null)
@@ -378,17 +385,34 @@ export function VideoControls({
         </div>
       )}
 
-      {recording && mode === 'render' && (
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {/* Finalizing中は録画中ではないので点滅を止める */}
-            <span className={`size-2 rounded-full bg-red-500 ${finalizing ? '' : 'animate-pulse'}`} />
-            {finalizing
-              ? 'Finalizing…'
-              : `Rendering… ${progress ? `${progress.frame}/${progress.total}` : 'starting'}`}
-          </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-            <div className="h-full bg-primary transition-[width]" style={{ width: `${progress ? (progress.frame / progress.total) * 100 : 0}%` }} />
+      {/* Renderの進捗はモーダルで表示する。viewが画面外へ退避している間(overlayVisible)だけ出す。 */}
+      {overlayVisible && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="w-[min(90vw,440px)] space-y-4 rounded-xl border border-border bg-card p-6 shadow-2xl">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <span className={`size-2 rounded-full bg-red-500 ${finalizing ? '' : 'animate-pulse'}`} />
+              {finalizing ? 'Finalizing…' : 'Rendering'}
+            </div>
+            {/* ライブプレビュー: 実際の出力フレーム。届くまではプレースホルダ。 */}
+            <div className="flex max-h-[55vh] items-center justify-center overflow-hidden rounded-lg bg-black">
+              {renderPreview ? (
+                <img src={renderPreview} alt="" className="max-h-[55vh] w-full object-contain" />
+              ) : (
+                <div className="py-16 text-xs text-muted-foreground">Preparing…</div>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{finalizing ? 'Encoding…' : progress ? `${progress.frame} / ${progress.total}` : 'starting…'}</span>
+                <span>{progress ? Math.round((progress.frame / progress.total) * 100) : 0}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                <div className="h-full bg-primary transition-[width]" style={{ width: `${progress ? (progress.frame / progress.total) * 100 : 0}%` }} />
+              </div>
+            </div>
+            <Button variant="destructive" className="w-full" onClick={onToggle} disabled={finalizing}>
+              <Square className="fill-current" /> Cancel
+            </Button>
           </div>
         </div>
       )}

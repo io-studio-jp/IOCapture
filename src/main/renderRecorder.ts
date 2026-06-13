@@ -3,13 +3,15 @@ import { copyFile, mkdtemp, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { once } from 'events'
+import { nativeImage } from 'electron'
 import ffmpegStatic from 'ffmpeg-static'
 import {
   acquireCaptureSurface,
   getArtworkView,
   getMainWindow,
   freezeArtworkPreview,
-  unfreezeArtworkPreview
+  unfreezeArtworkPreview,
+  setArtworkBoundsLocked
 } from './artworkView'
 import { showSaveDialogAttached } from './saveDialog'
 import { planSupersample } from '../shared/supersample'
@@ -22,6 +24,9 @@ const ffmpegPath = ffmpegStatic ? ffmpegStatic.replace('app.asar', 'app.asar.unp
 const STEP_TIMEOUT_MS = 5000
 // モーションブラーのシャッター角(180°=フレーム間隔の前半だけ露光する映画の標準)。
 const SHUTTER = 0.5
+// ライブプレビュー更新の最小間隔(ms)とプレビュー長辺。撮影中ステージに実フレームを流す用。
+const PREVIEW_INTERVAL_MS = 100
+const PREVIEW_MAX_EDGE = 480
 
 let active = false
 let cancelRequested = false
@@ -38,6 +43,14 @@ function sendProgress(p: RenderProgress): void {
   const win = getMainWindow()
   if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return
   win.webContents.send('render:progress', p)
+}
+
+// 進捗モーダルの表示/非表示。viewが画面外へ退避している間だけtrueにする
+// (開始直後/終了直後にviewが画面内へ戻る瞬間にモーダルが被らないようにするため)。
+function sendOverlay(visible: boolean): void {
+  const win = getMainWindow()
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return
+  win.webContents.send('render:overlay', visible)
 }
 
 /** 常時注入済みの時計シムをその場で仮想モードへ切替える(リロード無し=作品の状態を保持)。 */
@@ -77,6 +90,8 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
   // スリバー退避中もrAF/コンポジットを止めさせない(オフスクリーン扱いで
   // 実rAFが停止するとstepの描画待ちがタイムアウトする)。
   view.webContents.setBackgroundThrottling(false)
+  // 撮影中はリサイズ由来のbounds変更を無視する(退避ビューの画面せり出し・座標崩れ防止)。
+  setArtworkBoundsLocked(true)
 
   active = true
   cancelRequested = false
@@ -99,7 +114,12 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
 
     // 3. キャプチャサーフェスを確保(内部のfreezeはfrozenフラグで既にスキップされる)。
     // SSAA時は2倍で描画し、各フレームをsizeへ高品質縮小する。
-    surface = await acquireCaptureSurface(planSupersample(size, args.supersample === true))
+    // offscreen: nativeでも撮影中はviewを画面外へ退避し、進捗モーダルを前面に出せるようにする。
+    surface = await acquireCaptureSurface(planSupersample(size, args.supersample === true), {
+      offscreen: true
+    })
+    // viewを退避し終えた(=隠れた)ので進捗オーバーレイを表示してよい。
+    sendOverlay(true)
 
     // 4. 一時ディレクトリとffmpegプロセスを準備する。
     const ext = format === 'webp' ? 'webp' : 'mp4'
@@ -204,6 +224,26 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
 
     const frameMs = 1000 / fps
 
+    // ライブプレビュー: 実際の出力フレームを縮小して進捗モーダルへ流す(render:preview)。
+    // 重いので最小間隔で間引く。
+    let lastPreviewMs = 0
+    const sendPreview = (buf: Buffer): void => {
+      const now = Date.now()
+      if (now - lastPreviewMs < PREVIEW_INTERVAL_MS) return
+      lastPreviewMs = now
+      const win = getMainWindow()
+      if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return
+      try {
+        const scale = Math.min(1, PREVIEW_MAX_EDGE / Math.max(size.width, size.height))
+        const preview = nativeImage
+          .createFromBitmap(buf, { width: size.width, height: size.height })
+          .resize({ width: Math.max(1, Math.round(size.width * scale)) })
+        win.webContents.send('render:preview', preview.toDataURL())
+      } catch {
+        // プレビュー生成失敗は無視(撮影は続行)
+      }
+    }
+
     // 5. フレームループ: 仮想時計を1フレームずつ進めて撮影する。
     for (let i = 0; i < total; i++) {
       if (cancelRequested) break
@@ -224,6 +264,9 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
         await stepVirtual(frameMs, i)
         buf = await captureTightFrame()
       }
+
+      // 撮ったフレームでプレビューを更新する(間引きあり)。
+      sendPreview(buf)
 
       if (!proc.stdin.writable) {
         aborted = 'ffmpeg stdin closed unexpectedly'
@@ -291,9 +334,13 @@ export async function startRender(args: StartRenderArgs): Promise<RenderResult> 
     } catch {
       // 破棄競合等は無視(復帰処理を止めない)
     }
-    // 5. サーフェス解放(bounds/zoom復元+120ms待機+unfreeze)
+    // 5. viewが画面内へ戻る前にモーダルを閉じる(戻る瞬間の作品チラ見えを防ぐ)。
+    sendOverlay(false)
+    // 6. サーフェス解放(bounds/zoom復元+120ms待機+unfreeze)
     await surface?.release().catch(() => {})
     // 6. プレビュー固定を解除(native-pathではreleaseがno-opでunfreezeしないため必要)
     unfreezeArtworkPreview()
+    // 7. リサイズロック解除(releaseでboundsを最新へ戻した後に解く)
+    setArtworkBoundsLocked(false)
   }
 }
