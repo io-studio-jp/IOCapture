@@ -93,6 +93,8 @@ export type Prefs = {
   captureMode?: 'live' | 'render'
   // Renderモードの録画秒数
   renderLengthSec?: number
+  // Renderモードのフレームレート(24/30/60)。未設定時は60
+  renderFps?: number
   // Renderのモーションブラーサブフレーム数(1=Off, 2/4/8)
   renderBlurSamples?: number
   // SSAA(2倍描画→縮小)の有効/無効

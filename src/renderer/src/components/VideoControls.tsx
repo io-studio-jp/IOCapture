@@ -57,6 +57,12 @@ export function VideoControls({
     setLengthSecState(v)
     window.capture.setPrefs({ renderLengthSec: v })
   }
+  // Render録画のフレームレート(24/30/60)
+  const [fps, setFpsState] = useState(() => window.capture.getPrefs().renderFps ?? 60)
+  const setFps = (v: number): void => {
+    setFpsState(v)
+    window.capture.setPrefs({ renderFps: v })
+  }
   // モーションブラーのサブフレーム数(1=Off)
   const [blurSamples, setBlurSamplesState] = useState(() => window.capture.getPrefs().renderBlurSamples ?? 1)
   const setBlurSamples = (v: number): void => {
@@ -142,7 +148,7 @@ export function VideoControls({
         setRecording(true)
         startingRef.current = false // RenderはsetRecording(true)で以降onToggleがCancelに分岐する
         setProgress(null)
-        const res = await startRenderRecording(target, lengthSec, format, { blurSamples, supersample })
+        const res = await startRenderRecording(target, lengthSec, format, { blurSamples, supersample }, fps)
         setRecording(false)
         setProgress(null)
         if ('mp4Path' in res) {
@@ -300,6 +306,15 @@ export function VideoControls({
             ))}
           </div>
           <Input type="number" min={1} value={lengthSec} onChange={(e) => setLengthSec(Math.max(1, +e.target.value))} disabled={recording || counting} />
+          {/* フレームレート: 仮想時計で正確なfpsを保証(24/30/60) */}
+          <Label className="text-xs text-muted-foreground">FPS</Label>
+          <div className="grid grid-cols-3 gap-2">
+            {[24, 30, 60].map((f) => (
+              <Button key={f} size="sm" className="w-full px-0" variant={fps === f ? 'default' : 'secondary'} onClick={() => setFps(f)} disabled={recording || counting}>
+                {f}
+              </Button>
+            ))}
+          </div>
           {/* モーションブラー: シャッター180°のサブフレーム合成。レンダリング時間は約N倍 */}
           <Label className="text-xs text-muted-foreground">Motion blur</Label>
           <div className="grid grid-cols-4 gap-2">
